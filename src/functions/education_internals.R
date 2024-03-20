@@ -52,24 +52,29 @@ modify_gender_values <- function(data, target_col) {
 #--------------------------------------------------------------------------------------------------------
 
 #------------------------------------------------ Function to Ensure Continuous Age Ranges Between Levels
-validate_age_continuity_and_levels <- function(school_info, required_levels) {
+validate_age_continuity_and_levels <- function(school_level_infos, required_levels) {
+  # Flatten the list into a single data frame for easier manipulation
+  all_levels_df <- bind_rows(school_level_infos, .id = "level")
+  
   # Check for missing levels
-  missing_levels <- setdiff(required_levels, school_info$level)
+  existing_levels <- unique(all_levels_df$level)
+  missing_levels <- setdiff(required_levels, existing_levels)
   if (length(missing_levels) > 0) {
     stop(sprintf("Missing required educational levels: %s", paste(missing_levels, collapse=", ")), call. = FALSE)
   }
   
   # Sorting might be necessary depending on your data
-  school_info <- school_info %>% arrange(starting_age)
+  all_levels_df <- all_levels_df %>% arrange(starting_age)
   
   # Continue with the continuity check
-  for (i in 2:nrow(school_info)) {
-    if (school_info$starting_age[i] != school_info$ending_age[i-1] + 1) {
+  for (i in 2:nrow(all_levels_df)) {
+    if (all_levels_df$starting_age[i] != all_levels_df$ending_age[i-1] + 1) {
       stop(sprintf("Age range discontinuity between levels: %s ends at %d, but %s starts at %d", 
-                   school_info$level[i-1], school_info$ending_age[i-1], 
-                   school_info$level[i], school_info$starting_age[i]), call. = FALSE)
+                   all_levels_df$level[i-1], all_levels_df$ending_age[i-1], 
+                   all_levels_df$level[i], all_levels_df$starting_age[i]), call. = FALSE)
     }
   }
+  
   return(TRUE)
 }
 

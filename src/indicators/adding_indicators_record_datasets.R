@@ -39,15 +39,17 @@ pacman::p_load(tidyverse,
 
 # Use the functions
 school_variables_sheet    <- read_xlsx('contextspecific/context_info.xlsx', sheet = "School levels and grades")
+file_school_cycle <- "contextspecific/UNESCO ISCED Mappings_MSNAcountries_consolidated.xlsx"
+country_assessment <- "SYR" # Can input either country code or name, case-insensitive
 
-# Extract the necessary values
-start_school_year <- school_variables_sheet[which(school_variables_sheet['variable name'] == "start_school_year"), "country variable name"]
-data_collection   <- school_variables_sheet[which(school_variables_sheet['variable name'] == "data_collection"), "country variable name"]
-numer_levels      <- as.numeric(school_variables_sheet[which(school_variables_sheet['variable name'] == "numer_levels"), "country variable name"])
 
-# Calculate age_correction and create levels_df
-levels_grades        <- create_levels_df(school_variables_sheet, which(school_variables_sheet['variable name'] == "numer_levels"), numer_levels)
+info_country_school_structure <- read_school_level_grade_age(file_school_cycle, country_assessment)
 
+summary_school_levels <- info_country_school_structure$df1    # DataFrame 1: level code, Learning Level, starting age, duration
+levels_grades_age_ranges <-info_country_school_structure$df2  # DataFrame 2: level code, Learning Level, Year/Grade, Theoretical Start age, limit age
+
+print(summary_school_levels)
+print(levels_grades_age_ranges)
 
 
 
@@ -65,18 +67,11 @@ roster_education_core_function <- function(
     education_barrier = 'education_barrier',
     start_school_year = 'september',
     beginning_data_collection = 'may',
-    levels_grades = NULL, # DataFrame input by the user
-    # Default vectors as hints for the user if levels_grades is not provided
-    starting_age = c(kindergarden = 4, primary = 6, `lower secondary` = 14, `upper secondary` = 17),
-    duration = c(kindergarden = 2, primary = 8, `lower secondary` = 3, `upper secondary` = 1)
+    dataframe_summary_info_school = summary_school_levels,
+    dataframe_levels_grades_ages = levels_grades_age_ranges
 ) {
   
-  french_to_english_levels <- c(
-    'écoles maternelles' = 'kindergarden',
-    'école élémentaire' = 'primary',
-    'secondaire premier cycle' = 'lower secondary',
-    'secondaire deuxième cycle' = 'upper secondary'
-  )
+
   
   #------ Enquos and checks
   edu_cols <- rlang::enquos(education_access, education_disrupted_climate, education_disrupted_teacher, education_disrupted_displaced, education_disrupted_occupation)
@@ -120,179 +115,207 @@ roster_education_core_function <- function(
   
   education_access_col <- "education_access"
   education_level_grades_col <- education_level_grade
-  
-  
-  #------ Definition of School Age, Age Limits for Each School Level, and Methods for Counting School-Age Children
-  level_names <- c('kindergarden', 'primary', 'lower secondary', 'upper secondary') # Fixed level names 
-  # Ensure that starting_age and duration have entries for all levels
-  if (!is.null(levels_grades) && all(c("level", "starting_age", "duration") %in% names(levels_grades))) {
-    # Use levels_grades as the primary source of level info
-    school_level_info <- levels_grades
-  } else {
-    # Fallback to using the provided starting_age and duration vectors
-    # Transforming the vectors into a data frame
-    school_level_info <- data.frame(
-      level = names(starting_age),
-      starting_age = unname(starting_age),
-      duration = unname(duration),
-      stringsAsFactors = FALSE
-    )
-  }
-  school_level_info <- school_level_info %>% mutate(ending_age = starting_age + duration - 1 ) ## adding ending age (-1 to make sure there is no overlap)
-  
-  #-- After creating or loading school_level_info, substitute French level names with English ones
-  school_level_info$level <- sapply(school_level_info$level, function(level) {
-    if (level %in% names(french_to_english_levels)) {
-      return(french_to_english_levels[[level]])
-    } else {
-      return(level)
-    }
-  })
+
  
-  #-- Apply the validation to Ensure Continuous Age Ranges Between Levels and all levels being present 
-  validate_age_continuity_and_levels(school_level_info, level_names)
-  
-  primary_info <- school_level_info %>% filter(level == "primary")  %>% select(starting_age, ending_age)
-  lower_secondary_info <- school_level_info %>% filter(level == "lower secondary") %>% select(starting_age,  ending_age)
-  upper_secondary_info <- school_level_info %>% filter(level == "upper secondary") %>% select(starting_age,  ending_age)
-  kindergarden_info <- school_level_info %>% filter(level == "kindergarden") %>% select(starting_age,  ending_age)
+  ## ------ Modify the data set to have clear level and grade definition and the recorded limit for the matching ages
+  roster <- roster %>%
+    rename(!!"name_level_grade" := !!sym(education_level_grades_col))
   
 
-  print(school_level_info)
-  
-  # translate the levels to english and create a column with the level attended by the kid 
+  #roster_enhanced <- left_join(roster, dataframe_levels_grades_ages, by = "name_level_grade")
+  roster <- left_join(roster, dataframe_levels_grades_ages, by = "name_level_grade") %>%
+    select(uuid, person_id, everything(), -name_level_grade)
+
+
+
+  #------ Dynamically create info data frames for each school level based on the number of levels
+  school_level_infos <- list()
+
+  # Extract unique level codes sorted if needed
+  unique_levels <- sort(unique(summary_school_levels$`level code`))
+
+  for (level_code in unique_levels) {
+    # Extract relevant information for each level
+    level_info <- summary_school_levels %>%
+      filter(`level code` == level_code) %>%
+      summarise(starting_age = min(starting_age),
+                ending_age = max(starting_age) + max(duration) - 1) %>%
+      mutate(level = level_code) %>%
+      select(level, starting_age, ending_age)
+
+    # Store the extracted info in a list
+    school_level_infos[[level_code]] <- level_info
+  }
+
+  #example --> school_level_infos[['level1']]$starting_age
+
+  # Ensure continuous age ranges between levels and all levels being present
+  validate_age_continuity_and_levels(school_level_infos, unique_levels)
+
+
+
+
+  #
+  # #------ Create level-grade table for overage learners
+  #
+  #
+  #
+  #
+  #
+  # # Check the output
+  # print(roster$education_level)
+  #
+  #
+  #
+  #
+  #
+
   roster <- roster %>%
     mutate(
-      education_level = sapply(str_extract(!!sym(education_level_grades_col), "^[^,]+"), function(level) {
-        if (level %in% names(french_to_english_levels)) {
-          french_to_english_levels[[level]]
-        } else {
-          level
-        }
-      })
-    )
-  education_level_col  <- 'education_level'
-  
-  #------ Create level-grade table for overage learners
-  
-  
-  
-  
-  
-  # Check the output
-  print(roster$education_level)
-  
-  
-
-  
-
-
-  #------ adding school-cycles age columns, these are the denominators needed to calculate properly the education indicators
-  roster <- roster %>%
-    mutate(
-      # Use if_else to preserve NA values. if_else's third argument (false) defaults to NA when unspecified
       school_5_18_age = if_else(between(!!rlang::sym(true_age_col), 5, 18), 1, 0, missing = NA_integer_),
-      primary_age = if_else(between(!!rlang::sym(true_age_col), primary_info$starting_age, primary_info$ending_age), 1, 0, missing = NA_integer_),
-      lower_secondary_age = if_else(between(!!rlang::sym(true_age_col), lower_secondary_info$starting_age, lower_secondary_info$ending_age), 1, 0, missing = NA_integer_),
-      upper_secondary_age = if_else(between(!!rlang::sym(true_age_col), upper_secondary_info$starting_age, upper_secondary_info$ending_age + 1), 1, 0, missing = NA_integer_),
-      primary_minus_one_age = if_else(!!rlang::sym(true_age_col) == (primary_info$starting_age - 1), 1, 0, missing = NA_integer_),
-
       # For gender-specific calculations, add the gender condition to the logical vector
       school_5_18_age_girl = if_else(between(!!rlang::sym(true_age_col), 5, 18) & !!rlang::sym(ind_gender_col) == 2, 1, 0, missing = NA_integer_),
-      primary_age_girl = if_else(between(!!rlang::sym(true_age_col), primary_info$starting_age, primary_info$ending_age) & !!rlang::sym(ind_gender_col) == 2, 1, 0, missing = NA_integer_),
-      lower_secondary_age_girl = if_else(between(!!rlang::sym(true_age_col), lower_secondary_info$starting_age, lower_secondary_info$ending_age) & !!rlang::sym(ind_gender_col) == 2, 1, 0, missing = NA_integer_),
-      upper_secondary_age_girl = if_else(between(!!rlang::sym(true_age_col), upper_secondary_info$starting_age, upper_secondary_info$ending_age + 1) & !!rlang::sym(ind_gender_col) == 2, 1, 0, missing = NA_integer_),
-      primary_minus_one_age_girl = if_else(!!rlang::sym(true_age_col) == (primary_info$starting_age - 1) & !!rlang::sym(ind_gender_col) == 2, 1, 0, missing = NA_integer_),
-
-      school_5_18_age_boy = if_else(between(!!rlang::sym(true_age_col), 5, 18) & !!rlang::sym(ind_gender_col) == 1, 1, 0, missing = NA_integer_),
-      primary_age_boy = if_else(between(!!rlang::sym(true_age_col), primary_info$starting_age, primary_info$ending_age) & !!rlang::sym(ind_gender_col) == 1, 1, 0, missing = NA_integer_),
-      lower_secondary_age_boy = if_else(between(!!rlang::sym(true_age_col), lower_secondary_info$starting_age, lower_secondary_info$ending_age) & !!rlang::sym(ind_gender_col) == 1, 1, 0, missing = NA_integer_),
-      upper_secondary_age_boy = if_else(between(!!rlang::sym(true_age_col), upper_secondary_info$starting_age, upper_secondary_info$ending_age + 1) & !!rlang::sym(ind_gender_col) == 1, 1, 0, missing = NA_integer_),
-      primary_minus_one_age_boy = if_else(!!rlang::sym(true_age_col) == (primary_info$starting_age - 1) & !!rlang::sym(ind_gender_col) == 1, 1, 0, missing = NA_integer_),
-      
+      school_5_18_age_boy = if_else(between(!!rlang::sym(true_age_col), 5, 18) & !!rlang::sym(ind_gender_col) == 1, 1, 0, missing = NA_integer_)
     )
 
-  #------ adding indicators columns, these are the numerators needed to calculate properly the education indicators
+  print(unique_levels)
+  filtered_levels <- unique_levels[-1]
+  print(filtered_levels)
   
-  #-- accessing education
-  roster <- roster %>%
-    mutate(
-      school_5_18_accessing = if_else(between(!!rlang::sym(true_age_col), 5, 18)  & !!rlang::sym(education_access) == 1, 1, 0, missing = NA_integer_),
-      primary_age_accessing = if_else(between(!!rlang::sym(true_age_col), primary_info$starting_age, primary_info$ending_age)  & !!rlang::sym(education_access_col) == 1, 1, 0, missing = NA_integer_),
-      lower_secondary_age_accessing = if_else(between(!!rlang::sym(true_age_col), lower_secondary_info$starting_age, lower_secondary_info$ending_age)  & !!rlang::sym(education_access_col) == 1, 1, 0, missing = NA_integer_),
-      upper_secondary_age_accessing = if_else(between(!!rlang::sym(true_age_col), upper_secondary_info$starting_age, upper_secondary_info$ending_age + 1)  & !!rlang::sym(education_access_col) == 1, 1, 0, missing = NA_integer_),
+  print(school_level_infos)
 
-      school_5_18_age_accessing_girl = if_else(between(!!rlang::sym(true_age_col), 5, 18) & !!rlang::sym(ind_gender_col) == 2  & !!rlang::sym(education_access_col) == 1, 1, 0, missing = NA_integer_),
-      primary_age_accessing_girl = if_else(between(!!rlang::sym(true_age_col), primary_info$starting_age, primary_info$ending_age) & !!rlang::sym(ind_gender_col) == 2  & !!rlang::sym(education_access_col) == 1, 1, 0, missing = NA_integer_),
-      lower_secondary_age_accessing_girl = if_else(between(!!rlang::sym(true_age_col), lower_secondary_info$starting_age, lower_secondary_info$ending_age) & !!rlang::sym(ind_gender_col) == 2  & !!rlang::sym(education_access_col) == 1, 1, 0, missing = NA_integer_),
-      upper_secondary_age_accessing_girl = if_else(between(!!rlang::sym(true_age_col), upper_secondary_info$starting_age, upper_secondary_info$ending_age + 1) & !!rlang::sym(ind_gender_col) == 2  & !!rlang::sym(education_access_col) == 1, 1, 0, missing = NA_integer_),
 
-      school_5_18_age_accessing_boy = if_else(between(!!rlang::sym(true_age_col), 5, 18) & !!rlang::sym(ind_gender_col) == 1  & !!rlang::sym(education_access_col) == 1, 1, 0, missing = NA_integer_),
-      primary_age_accessing_boy = if_else(between(!!rlang::sym(true_age_col), primary_info$starting_age, primary_info$ending_age) & !!rlang::sym(ind_gender_col) == 1  & !!rlang::sym(education_access_col) == 1, 1, 0, missing = NA_integer_),
-      lower_secondary_age_accessing_boy = if_else(between(!!rlang::sym(true_age_col), lower_secondary_info$starting_age, lower_secondary_info$ending_age) & !!rlang::sym(ind_gender_col) == 1  & !!rlang::sym(education_access_col) == 1, 1, 0, missing = NA_integer_),
-      upper_secondary_age_accessing_boy = if_else(between(!!rlang::sym(true_age_col), upper_secondary_info$starting_age, upper_secondary_info$ending_age + 1) & !!rlang::sym(ind_gender_col) == 1  & !!rlang::sym(education_access_col) == 1, 1, 0, missing = NA_integer_)
-    )
+  for (level in filtered_levels) {
+    # Extract info for current level
+    starting_age <- as.numeric(school_level_infos[[level]]$starting_age)
+    ending_age <- as.numeric(school_level_infos[[level]]$ending_age)
+    if (level == tail(filtered_levels, n = 1)) {
+      ending_age <- ending_age + 1  # Adjust for last level
+    }
 
-  #-- NON accessing eduction --> these number they have to be calculated taking into account the OTS kids, too
-  roster <- roster %>%
-    mutate(
-      school_5_18_NON_accessing = school_5_18_age - school_5_18_accessing,
-      primary_age_NON_accessing = primary_age - primary_age_accessing, 
-      lower_secondary_age_NON_accessing = lower_secondary_age - lower_secondary_age_accessing,
-      upper_secondary_age_NON_accessing = upper_secondary_age - upper_secondary_age_accessing,
-      
-      school_5_18_age_NON_accessing_girl = school_5_18_age_girl - school_5_18_age_accessing_girl,
-      primary_age_NON_accessing_girl = primary_age_girl - primary_age_accessing_girl,
-      lower_secondary_age_NON_accessing_girl = lower_secondary_age_girl - lower_secondary_age_accessing_girl,
-      upper_secondary_age_NON_accessing_girl = upper_secondary_age_girl - upper_secondary_age_accessing_girl,
-      
-      school_5_18_age_NON_accessing_boy = school_5_18_age_boy - school_5_18_age_accessing_boy,
-      primary_age_NON_accessing_boy = primary_age_boy - primary_age_accessing_boy,
-      lower_secondary_age_NON_accessing_boy = lower_secondary_age_boy - lower_secondary_age_accessing_boy,
-      upper_secondary_age_NON_accessing_boy = upper_secondary_age_boy - upper_secondary_age_accessing_boy,
-    )
+    # Define dynamic column names
+    age_col_name <- paste0(level, "_age")
+    age_accessing_col_name <- paste0(level, "_age_accessing")
+    age_non_accessing_col_name <- paste0(level, "_NON_accessing")
+
   
-  
-  #-- additional numerators  
-  roster <- roster %>%
-    mutate(
-      # Participation rate in organised learning
-      pre_primary_level_and_primary_minus_one_age = if_else(!!rlang::sym(true_age_col) == (primary_info$starting_age - 1)  
-                                                            & (!!rlang::sym(education_level_col) == 'kindergarden' | !!rlang::sym(education_level_col) == 'primary'),
-                                                              1, 0, missing = NA_integer_),
-      # for early enrolment
-      primary_level_and_primary_minus_one_age = if_else(!!rlang::sym(true_age_col) == (primary_info$starting_age - 1)  
-                                                        &  !!rlang::sym(education_level_col) == 'primary',
-                                                        1, 0, missing = NA_integer_), 
-      # Net attendance rate (adjusted) 
-      attending_level_and_primary_age = if_else(between(!!rlang::sym(true_age_col), primary_info$starting_age, primary_info$ending_age)  
-                                                          & (!!rlang::sym(education_level_col) == 'primary' | !!rlang::sym(education_level_col) == 'lower secondary' | !!rlang::sym(education_level_col) == 'upper secondary'),
-                                                          1, 0, missing = NA_integer_),
-      # Net attendance rate (adjusted) 
-      attending_level_and_lower_secondary_age = if_else(between(!!rlang::sym(true_age_col), lower_secondary_info$starting_age, lower_secondary_info$ending_age)  
-                                                          & (!!rlang::sym(education_level_col) == 'lower secondary' | !!rlang::sym(education_level_col) == 'upper secondary'),
-                                                          1, 0, missing = NA_integer_),
-      # Net attendance rate (adjusted) 
-      attending_level_and_upper_secondary_age = if_else(between(!!rlang::sym(true_age_col), upper_secondary_info$starting_age, upper_secondary_info$ending_age + 1)  
-                                                          & !!rlang::sym(education_level_col) == 'upper secondary',
-                                                          1, 0, missing = NA_integer_),
-      
-      pre_primary_level_and_primary_minus_one_age_girl = if_else(!!rlang::sym(true_age_col) == (primary_info$starting_age - 1) & (!!rlang::sym(education_level_col) == 'kindergarden' | !!rlang::sym(education_level_col) == 'primary') & !!rlang::sym(ind_gender_col) == 2 ,  1, 0, missing = NA_integer_),
-      primary_level_and_primary_minus_one_age_girl = if_else(!!rlang::sym(true_age_col) == (primary_info$starting_age - 1)   &  !!rlang::sym(education_level_col) == 'primary' & !!rlang::sym(ind_gender_col) == 2,  1, 0, missing = NA_integer_), 
-      attending_level_and_primary_age_girl = if_else(between(!!rlang::sym(true_age_col), primary_info$starting_age, primary_info$ending_age)  & (!!rlang::sym(education_level_col) == 'primary' | !!rlang::sym(education_level_col) == 'lower secondary' | !!rlang::sym(education_level_col) == 'upper secondary') & !!rlang::sym(ind_gender_col) == 2,1, 0, missing = NA_integer_),
-      attending_level_and_lower_secondary_age_girl = if_else(between(!!rlang::sym(true_age_col), lower_secondary_info$starting_age, lower_secondary_info$ending_age)   & (!!rlang::sym(education_level_col) == 'lower secondary' | !!rlang::sym(education_level_col) == 'upper secondary') & !!rlang::sym(ind_gender_col) == 2,1, 0, missing = NA_integer_),
-      attending_level_and_upper_secondary_age_girl = if_else(between(!!rlang::sym(true_age_col), upper_secondary_info$starting_age, upper_secondary_info$ending_age + 1)   & !!rlang::sym(education_level_col) == 'upper secondary' & !!rlang::sym(ind_gender_col) == 2,    1, 0, missing = NA_integer_),
     
-      pre_primary_level_and_primary_minus_one_age_boy = if_else(!!rlang::sym(true_age_col) == (primary_info$starting_age - 1) & (!!rlang::sym(education_level_col) == 'kindergarden' | !!rlang::sym(education_level_col) == 'primary') & !!rlang::sym(ind_gender_col) == 1 ,  1, 0, missing = NA_integer_),
-      primary_level_and_primary_minus_one_age_boy = if_else(!!rlang::sym(true_age_col) == (primary_info$starting_age - 1)   &  !!rlang::sym(education_level_col) == 'primary' & !!rlang::sym(ind_gender_col) == 1,  1, 0, missing = NA_integer_), 
-      attending_level_and_primary_age_boy = if_else(between(!!rlang::sym(true_age_col), primary_info$starting_age, primary_info$ending_age)  & (!!rlang::sym(education_level_col) == 'primary' | !!rlang::sym(education_level_col) == 'lower secondary' | !!rlang::sym(education_level_col) == 'upper secondary') & !!rlang::sym(ind_gender_col) == 1,1, 0, missing = NA_integer_),
-      attending_level_and_lower_secondary_age_boy = if_else(between(!!rlang::sym(true_age_col), lower_secondary_info$starting_age, lower_secondary_info$ending_age)   & (!!rlang::sym(education_level_col) == 'lower secondary' | !!rlang::sym(education_level_col) == 'upper secondary') & !!rlang::sym(ind_gender_col) == 1,1, 0, missing = NA_integer_),
-      attending_level_and_upper_secondary_age_boy = if_else(between(!!rlang::sym(true_age_col), upper_secondary_info$starting_age, upper_secondary_info$ending_age + 1)   & !!rlang::sym(education_level_col) == 'upper secondary' & !!rlang::sym(ind_gender_col) == 1,    1, 0, missing = NA_integer_),
+    roster[[age_col_name]] <- ifelse(roster[[true_age_col]] >= starting_age & roster[[true_age_col]] <= ending_age, 1, 0)
+    roster[[age_accessing_col_name]] <- ifelse(roster[[age_col_name]] == 1 & roster[[education_access_col]] == 1, 1, 0)
+    roster[[age_non_accessing_col_name]] <- roster[[age_col_name]] - roster[[age_accessing_col_name]]
+  
+    
+    genders <- c("girl" = 2, "boy" = 1)
+    for (gender in names(genders)) {
+      gender_val <- genders[gender]
+      age_gender_col_name <- paste0(age_col_name, "_", gender)
+      accessing_gender_col_name <- paste0(age_accessing_col_name, "_", gender)
+      non_accessing_gender_col_name <- paste0(age_non_accessing_col_name, "_", gender)
+      
+      # Direct assignment for gender-specific conditions
+      roster[[age_gender_col_name]] <- ifelse( roster[[true_age_col]]>= starting_age &  roster[[true_age_col]] <= ending_age & roster[[ind_gender_col]] == gender_val, 1, 0)
+      roster[[accessing_gender_col_name]] <- ifelse(roster[[age_gender_col_name]] == 1 & roster[[education_access_col]] == 1, 1, 0)
+      roster[[non_accessing_gender_col_name]] <- roster[[age_gender_col_name]] - roster[[accessing_gender_col_name]]
+    }
+  }
+
+  
+  # adding the indicators for the single year before of the starting of the primary school
+  roster <- roster %>%
+    mutate(
+      level1_minus_one_age = if_else(!!rlang::sym(true_age_col) == (school_level_infos[['level1']]$starting_age - 1), 1, 0, missing = NA_integer_),
+      level1_minus_one_age_girl = if_else(!!rlang::sym(true_age_col) == (school_level_infos[['level1']]$starting_age - 1) & !!rlang::sym(ind_gender_col) == 2, 1, 0, missing = NA_integer_),
+      level1_minus_one_age_boy = if_else(!!rlang::sym(true_age_col) == (school_level_infos[['level1']]$starting_age - 1) & !!rlang::sym(ind_gender_col) == 1, 1, 0, missing = NA_integer_),
+
+      # Participation rate in organised learning
+      attending_level0_level1_and_level1_minus_one_age = if_else(!!rlang::sym(true_age_col) == (school_level_infos[['level1']]$starting_age - 1)
+                                            & (!!rlang::sym('level_code') == 'level0' | !!rlang::sym('level_code') == 'level1'),
+                                            1, 0, missing = NA_integer_),
+      # for early enrolment
+      attending_level1_and_level1_minus_one_age = if_else(!!rlang::sym(true_age_col) == (school_level_infos[['level1']]$starting_age - 1)
+                                                                 & !!rlang::sym('level_code') == 'level1',
+                                                                 1, 0, missing = NA_integer_),
+      
+      attending_level0_level1_and_level1_minus_one_age_girl = if_else(!!rlang::sym(true_age_col) == (school_level_infos[['level1']]$starting_age - 1) & (!!rlang::sym('level_code') == 'level0' | !!rlang::sym('level_code') == 'level1') & !!rlang::sym(ind_gender_col) == 2, 1, 0, missing = NA_integer_),
+      attending_level1_and_level1_minus_one_age_girl = if_else(!!rlang::sym(true_age_col) == (school_level_infos[['level1']]$starting_age - 1)  & !!rlang::sym('level_code') == 'level1' & !!rlang::sym(ind_gender_col) == 2,  1, 0, missing = NA_integer_),
+      attending_level0_level1_and_level1_minus_one_age_boy = if_else(!!rlang::sym(true_age_col) == (school_level_infos[['level1']]$starting_age - 1) & (!!rlang::sym('level_code') == 'level0' | !!rlang::sym('level_code') == 'level1')& !!rlang::sym(ind_gender_col) == 1,  1, 0, missing = NA_integer_),
+      attending_level1_and_level1_minus_one_age_boy = if_else(!!rlang::sym(true_age_col) == (school_level_infos[['level1']]$starting_age - 1) & !!rlang::sym('level_code') == 'level1'& !!rlang::sym(ind_gender_col) == 1,1, 0, missing = NA_integer_)
     )
+
+
+  for (level in filtered_levels) {
+    # Extract info for current level
+    starting_age <- school_level_infos[[level]]$starting_age
+    ending_age <- school_level_infos[[level]]$ending_age
+    
+    # Define dynamic column names for attendance rates
+    attending_col_name <- paste0("attending_", level, "_and_", level, "_age")
+    attending_col_name_girl <- paste0(attending_col_name, "_girl")
+    attending_col_name_boy <- paste0(attending_col_name, "_boy")
+    
+    # Define the condition for attending the current level or any higher level
+    attending_levels_condition <- paste0("level_code == '", level, "'", collapse = " | ")
+    for (higher_level in filtered_levels[which(filtered_levels == level):length(filtered_levels)]) {
+      attending_levels_condition <- paste(attending_levels_condition, " | level_code == '", higher_level, "'", collapse = "")
+    }
+    
+    # Dynamically create and update attendance rate columns in roster
+    roster <- roster %>%
+      mutate(
+        !!sym(attending_col_name) := if_else(
+          between(!!sym(true_age_col), starting_age, ending_age) & eval(parse(text = attending_levels_condition)),
+          1, 0, missing = NA_integer_
+        ),
+        !!sym(attending_col_name_girl) := if_else(
+          !!sym(attending_col_name) == 1 & !!sym(ind_gender_col) == 2,
+          1, 0, missing = NA_integer_
+        ),
+        !!sym(attending_col_name_boy) := if_else(
+          !!sym(attending_col_name) == 1 & !!sym(ind_gender_col) == 1,
+          1, 0, missing = NA_integer_
+        )
+      )
+  }
   
   
   
   
+  
+  
+  
+  
+  
+  
+ 
+# #-- additional numerators
+# roster <- roster %>%
+#   mutate(
+#    
+#     # Net attendance rate (adjusted)
+#     attending_level_and_primary_age = if_else(between(!!rlang::sym(true_age_col), primary_info$starting_age, primary_info$ending_age)
+#                                                         & (!!rlang::sym(education_level_col) == 'primary' | !!rlang::sym(education_level_col) == 'lower secondary' | !!rlang::sym(education_level_col) == 'upper secondary'),
+#                                                         1, 0, missing = NA_integer_),
+#     # Net attendance rate (adjusted)
+#     attending_level_and_lower_secondary_age = if_else(between(!!rlang::sym(true_age_col), lower_secondary_info$starting_age, lower_secondary_info$ending_age)
+#                                                         & (!!rlang::sym(education_level_col) == 'lower secondary' | !!rlang::sym(education_level_col) == 'upper secondary'),
+#                                                         1, 0, missing = NA_integer_),
+#     # Net attendance rate (adjusted)
+#     attending_level_and_upper_secondary_age = if_else(between(!!rlang::sym(true_age_col), upper_secondary_info$starting_age, upper_secondary_info$ending_age + 1)
+#                                                         & !!rlang::sym(education_level_col) == 'upper secondary',
+#                                                         1, 0, missing = NA_integer_),
+# 
+#     attending_level_and_primary_age_girl = if_else(between(!!rlang::sym(true_age_col), primary_info$starting_age, primary_info$ending_age)  & (!!rlang::sym(education_level_col) == 'primary' | !!rlang::sym(education_level_col) == 'lower secondary' | !!rlang::sym(education_level_col) == 'upper secondary') & !!rlang::sym(ind_gender_col) == 2,1, 0, missing = NA_integer_),
+#     attending_level_and_lower_secondary_age_girl = if_else(between(!!rlang::sym(true_age_col), lower_secondary_info$starting_age, lower_secondary_info$ending_age)   & (!!rlang::sym(education_level_col) == 'lower secondary' | !!rlang::sym(education_level_col) == 'upper secondary') & !!rlang::sym(ind_gender_col) == 2,1, 0, missing = NA_integer_),
+#     attending_level_and_upper_secondary_age_girl = if_else(between(!!rlang::sym(true_age_col), upper_secondary_info$starting_age, upper_secondary_info$ending_age + 1)   & !!rlang::sym(education_level_col) == 'upper secondary' & !!rlang::sym(ind_gender_col) == 2,    1, 0, missing = NA_integer_),
+# 
+#      attending_level_and_primary_age_boy = if_else(between(!!rlang::sym(true_age_col), primary_info$starting_age, primary_info$ending_age)  & (!!rlang::sym(education_level_col) == 'primary' | !!rlang::sym(education_level_col) == 'lower secondary' | !!rlang::sym(education_level_col) == 'upper secondary') & !!rlang::sym(ind_gender_col) == 1,1, 0, missing = NA_integer_),
+#     attending_level_and_lower_secondary_age_boy = if_else(between(!!rlang::sym(true_age_col), lower_secondary_info$starting_age, lower_secondary_info$ending_age)   & (!!rlang::sym(education_level_col) == 'lower secondary' | !!rlang::sym(education_level_col) == 'upper secondary') & !!rlang::sym(ind_gender_col) == 1,1, 0, missing = NA_integer_),
+#     attending_level_and_upper_secondary_age_boy = if_else(between(!!rlang::sym(true_age_col), upper_secondary_info$starting_age, upper_secondary_info$ending_age + 1)   & !!rlang::sym(education_level_col) == 'upper secondary' & !!rlang::sym(ind_gender_col) == 1,    1, 0, missing = NA_integer_),
+#   )
+# 
+# 
+# 
+# 
 # 
 #   roster <- dplyr::mutate(
 #     roster,
@@ -381,9 +404,9 @@ roster_education_core_function <- function(
 #   )
 # 
 # 
-# 
-# 
-#   
+
+
+
   
  
   return(roster)
@@ -403,9 +426,8 @@ modified_roster <- roster_education_core_function(roster, household_data,
                                                   'education_barrier', 
                                                   start_school_year = 'september',
                                                   beginning_data_collection = 'may',
-                                                  #levels_grades,
-                                                  starting_age = c(kindergarden = 4,primary = 6,  `lower secondary` = 12, `upper secondary` = 17),
-                                                  duration = c(kindergarden = 2, primary = 6,`lower secondary` = 5, `upper secondary` = 2)
+                                                  summary_school_levels,
+                                                  levels_grades_age_ranges
                                                   )
 
 

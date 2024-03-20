@@ -1,5 +1,58 @@
 library(readxl)
 
+read_school_level_grade_age <- function(file_path, country_input) {
+  # Read the Excel file
+  df <- readxl::read_excel(file_path, sheet = "Compiled")
+  
+  # Convert the country input and dataframe columns to lowercase for case-insensitive comparison
+  country_input_lower <- tolower(country_input)
+  
+  # Check if the country exists in the dataframe
+  if(sum(tolower(df$`country code`) == country_input_lower | tolower(df$country) == country_input_lower) == 0){
+    warning(sprintf("The country '%s' does not exist in the dataset.", country_input))
+    return(NULL)
+  }
+  
+  # Filter data for the specified country by code or name, case-insensitive
+  country_df <- dplyr::filter(df, tolower(`country code`) == country_input_lower | tolower(country) == country_input_lower)
+  
+  # DataFrame 1: level code, Learning Level, starting age, duration
+  df1 <- country_df %>%
+    dplyr::group_by(`level code`, `learning level`) %>%
+    dplyr::summarise(starting_age = min(`theoretical start age`),
+                     duration = dplyr::n(),
+                     .groups = 'drop')
+  
+  # Adjust for level0 duration if both level0 and level1 exist
+  if ("level0" %in% df1$`level code` && "level1" %in% df1$`level code`) {
+    starting_age_level0 <- df1$starting_age[df1$`level code` == "level0"]
+    starting_age_level1 <- df1$starting_age[df1$`level code` == "level1"]
+    duration_level0 <- starting_age_level1 - starting_age_level0
+    
+    df1 <- df1 %>%
+      mutate(duration = ifelse(`level code` == "level0", duration_level0, duration))
+  }
+  
+  # Correctly adjust limit_age to be starting_age + 2 for all entries
+  country_df <- country_df %>%
+    dplyr::mutate(limit_age = `theoretical start age` + 2)
+  
+  # DataFrame 2: level code, Learning Level, Year/Grade, Theoretical Start age, limit age
+  df2 <- country_df %>%
+    dplyr::select(`level code`, `learning level`, `year/grade`, `theoretical start age`, limit_age, `name -- for kobo`)
+  
+  df2 <- df2 %>%
+    rename(
+      level_code = `level code`,
+      name_level = `learning level`,
+      starting_age = `theoretical start age`,
+      name_level_grade = `name -- for kobo`,
+      grade = `year/grade`
+    )
+  
+  return(list(df1 = df1, df2 = df2))
+} # Closing bracket for the function
+
 
 
 
@@ -45,4 +98,3 @@ create_levels_df <- function(school_sheet, num_levels_row, num_levels) {
 }
 
 
-#--------------------------------------------------------------------------------------------------------
