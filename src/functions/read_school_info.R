@@ -2,7 +2,7 @@ library(readxl)
 
 read_school_level_grade_age <- function(file_path, country_input) {
   # Read the Excel file
-  df <- readxl::read_excel(file_path, sheet = "Compiled")
+  df <- readxl::read_excel(file_path, sheet = "Compiled_Levels_Grades")
   
   # Convert the country input and dataframe columns to lowercase for case-insensitive comparison
   country_input_lower <- tolower(country_input)
@@ -39,7 +39,7 @@ read_school_level_grade_age <- function(file_path, country_input) {
   
   # DataFrame 2: level code, Learning Level, Year/Grade, Theoretical Start age, limit age
   df2 <- country_df %>%
-    dplyr::select(`level code`, `learning level`, `year/grade`, `theoretical start age`, limit_age, `name -- for kobo`)
+    dplyr::select(`level code`, `learning level`, `year-grade`, `theoretical start age`, limit_age, `name -- for kobo`)
   
   df2 <- df2 %>%
     rename(
@@ -47,7 +47,7 @@ read_school_level_grade_age <- function(file_path, country_input) {
       name_level = `learning level`,
       starting_age = `theoretical start age`,
       name_level_grade = `name -- for kobo`,
-      grade = `year/grade`
+      grade = `year-grade`
     )
   
   return(list(df1 = df1, df2 = df2))
