@@ -40,7 +40,7 @@ pacman::p_load(tidyverse,
 # Use the functions
 school_variables_sheet    <- read_xlsx('contextspecific/context_info.xlsx', sheet = "School levels and grades")
 file_school_cycle <- "contextspecific/UNESCO ISCED Mappings_MSNAcountries_consolidated.xlsx"
-country_assessment <- "AFG" # Can input either country code or name, case-insensitive
+country_assessment <- "SYR" # Can input either country code or name, case-insensitive
 
 
 info_country_school_structure <- read_school_level_grade_age(file_school_cycle, country_assessment)
@@ -123,7 +123,7 @@ roster_education_core_function <- function(
   
 
   #roster_enhanced <- left_join(roster, dataframe_levels_grades_ages, by = "name_level_grade")
-  roster <- left_join(roster, dataframe_levels_grades_ages, by = "name_level_grade") %>%
+  roster <- left_join(roster, levels_grades_ages, by = "name_level_grade") %>%
     select(uuid, person_id, everything(), -name_level_grade)
 
 
@@ -131,7 +131,11 @@ roster_education_core_function <- function(
   roster <- roster %>%
     mutate(across(c(level_code, name_level, grade), ~if_else(is.na(education_access) | education_access == 0, NA_character_, .)))
   
-
+  # reducing the dataset to contain only school-aged children
+  roster <- roster %>%
+    filter(between(!!rlang::sym(true_age_col), 5, 18))
+  
+  
   #------ Dynamically create info data frames for each school level based on the number of levels
   school_level_infos <- list()
 
@@ -151,28 +155,10 @@ roster_education_core_function <- function(
     school_level_infos[[level_code]] <- level_info
   }
 
-  #example --> school_level_infos[['level1']]$starting_age
 
   # Ensure continuous age ranges between levels and all levels being present
   validate_age_continuity_and_levels(school_level_infos, unique_levels)
 
-
-
-
-  #
-  # #------ Create level-grade table for overage learners
-  #
-  #
-  #
-  #
-  #
-  # # Check the output
-  # print(roster$education_level)
-  #
-  #
-  #
-  #
-  #
 
   roster <- roster %>%
     mutate(
@@ -181,9 +167,25 @@ roster_education_core_function <- function(
       school_5_18_age_girl = if_else(between(!!rlang::sym(true_age_col), 5, 18) & !!rlang::sym(ind_gender_col) == 2, 1, 0, missing = NA_integer_),
       school_5_18_age_boy = if_else(between(!!rlang::sym(true_age_col), 5, 18) & !!rlang::sym(ind_gender_col) == 1, 1, 0, missing = NA_integer_)
     )
+  
 
   filtered_levels <- unique_levels[-1]
-
+  
+  
+  for (level in filtered_levels) {
+    
+    accessing_level_col_name <- paste0(level, "_accessing")
+    roster[[accessing_level_col_name]]  <-  if_else(roster[['level_code']] == level, 1, 0, missing = NA_integer_)
+    
+    genders <- c("girl" = 2, "boy" = 1)
+    for (gender in names(genders)) {
+      gender_val <- genders[gender]
+      accessing_level_gender_col_name <- paste0(accessing_level_col_name, "_", gender)
+      roster[[accessing_level_gender_col_name]]  <-  if_else(roster[['level_code']] == level & roster[[ind_gender_col]] == gender_val, 1, 0, missing = NA_integer_)
+    }
+  }
+  
+#level_code == level
 
   for (level in filtered_levels) {
     # Extract info for current level
@@ -247,10 +249,10 @@ roster_education_core_function <- function(
   for (level in filtered_levels) {
     starting_age <- as.numeric(school_level_infos[[level]]$starting_age)
     ending_age <- as.numeric(school_level_infos[[level]]$ending_age)
-    
+    #
     higher_levels_numeric <- gsub("level", "",  paste(filtered_levels[which(filtered_levels >= level)], collapse = ""))
     attending_col_name <- paste0("attending_level", higher_levels_numeric, "_and_", level, "_age")
-
+    #
     roster[[attending_col_name]] <- ifelse(  roster[[true_age_col]] >= starting_age & roster[[true_age_col]] <= ending_age & as.integer(as.factor(roster$level_code)) >= as.integer(as.factor(level)),1, 0 )   
     
     genders <- c("girl" = 2, "boy" = 1)
@@ -263,10 +265,20 @@ roster_education_core_function <- function(
     
   }
   
- 
-  
-  
-  
+  # overage learners
+  for (level in filtered_levels) {
+    
+    overage_level_col_name <- paste0(level, "_overage_learners")
+    roster[[overage_level_col_name]] <- ifelse(  roster[['level_code']] == level  & (roster[[true_age_col]] - roster[['limit_age']]) >= 2, 1, 0)
+    genders <- c("girl" = 2, "boy" = 1)
+    for (gender in names(genders)) {
+      gender_val <- genders[gender]
+      overage_level_gender_col_name <- paste0(level, "_overage_learners", "_", gender)
+      
+      roster[[overage_level_gender_col_name]] <- ifelse(  roster[['level_code']] == level  & (roster[[true_age_col]] - roster[['limit_age']]) >= 2  & roster[[ind_gender_col]] == gender_val, 1, 0)
+      
+    }
+  }
   
   
   
