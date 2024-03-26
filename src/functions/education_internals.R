@@ -98,3 +98,10 @@ calculate_age_correction <- function(start_month, collection_month) {
 }
 #--------------------------------------------------------------------------------------------------------
 
+# Define a helper function to safely rename columns if they exist
+safe_rename <- function(dataframe, old_name, new_name) {
+  if(old_name %in% names(dataframe)) {
+    dataframe <- rename(dataframe, !!new_name := !!sym(old_name))
+  }
+  return(dataframe)
+}
