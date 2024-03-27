@@ -1,6 +1,6 @@
 rm(list = ls())
 source("src/functions/install_dependencies.R")
-source("src/functions/read_school_info.R")
+#source("src/functions/read_school_info.R")
 source("src/functions/internals.R")
 source("src/functions/education_internals.R")
 
@@ -75,23 +75,22 @@ roster_education_core_function <- function(
     # Example
     # school_info = list(
     #   list(level_code = "level0", name_level = "early childhood education", grade = NA, starting_age = 5, limit_age = 7, name_level_grade = "early_childhood_education"),
-    #   list(level_code = "level1", name_level = "primary", grade = "grade 1", starting_age = 6, limit_age = 8, name_level_grade = "primary_grade_1"),
-    #   list(level_code = "level1", name_level = "primary", grade = "grade 2", starting_age = 7, limit_age = 9, name_level_grade = "primary_grade_2"),
-    #   list(level_code = "level1", name_level = "primary", grade = "grade 3", starting_age = 8, limit_age = 10, name_level_grade = "primary_grade_3"),
-    #   list(level_code = "level1", name_level = "primary", grade = "grade 4", starting_age = 9, limit_age = 11, name_level_grade = "primary_grade_4"),
-    #   list(level_code = "level1", name_level = "primary", grade = "grade 5", starting_age = 10, limit_age = 12, name_level_grade = "primary_grade_5"),
-    #   list(level_code = "level1", name_level = "primary", grade = "grade 6", starting_age = 11, limit_age = 13, name_level_grade = "primary_grade_6"),
-    #   list(level_code = "level2", name_level = "lower secondary", grade = "grade 7", starting_age = 12, limit_age = 14, name_level_grade = "lower_secondary_grade_7"),
-    #   list(level_code = "level2", name_level = "lower secondary", grade = "grade 8", starting_age = 13, limit_age = 15, name_level_grade = "lower_secondary_grade_8"),
-    #   list(level_code = "level2", name_level = "lower secondary", grade = "grade 9", starting_age = 14, limit_age = 16, name_level_grade = "lower_secondary_grade_9"),
-    #   list(level_code = "level3", name_level = "upper secondary", grade = "grade 10", starting_age = 15, limit_age = 17, name_level_grade = "upper_secondary_grade_10"),
-    #   list(level_code = "level3", name_level = "upper secondary", grade = "grade 11", starting_age = 16, limit_age = 18, name_level_grade = "upper_secondary_grade_11"),
-    #   list(level_code = "level4", name_level = "upper secondary", grade = "grade 12", starting_age = 17, limit_age = 19, name_level_grade = "upper_secondary_grade_12")
+    #   list(level_code = "level1", name_level = "primary", grade = "grade 1", starting_age = 6,  name_level_grade = "primary_grade_1"),
+    #   list(level_code = "level1", name_level = "primary", grade = "grade 2", starting_age = 7,  name_level_grade = "primary_grade_2"),
+    #   list(level_code = "level1", name_level = "primary", grade = "grade 3", starting_age = 8, name_level_grade = "primary_grade_3"),
+    #   list(level_code = "level1", name_level = "primary", grade = "grade 4", starting_age = 9, name_level_grade = "primary_grade_4"),
+    #   list(level_code = "level1", name_level = "primary", grade = "grade 5", starting_age = 10, name_level_grade = "primary_grade_5"),
+    #   list(level_code = "level1", name_level = "primary", grade = "grade 6", starting_age = 11,  name_level_grade = "primary_grade_6"),
+    #   list(level_code = "level2", name_level = "lower secondary", grade = "grade 7", starting_age = 12,  name_level_grade = "lower_secondary_grade_7"),
+    #   list(level_code = "level2", name_level = "lower secondary", grade = "grade 8", starting_age = 13,  name_level_grade = "lower_secondary_grade_8"),
+    #   list(level_code = "level2", name_level = "lower secondary", grade = "grade 9", starting_age = 14,  name_level_grade = "lower_secondary_grade_9"),
+    #   list(level_code = "level3", name_level = "upper secondary", grade = "grade 10", starting_age = 15,  name_level_grade = "upper_secondary_grade_10"),
+    #   list(level_code = "level3", name_level = "upper secondary", grade = "grade 11", starting_age = 16,  name_level_grade = "upper_secondary_grade_11"),
+    #   list(level_code = "level4", name_level = "upper secondary", grade = "grade 12", starting_age = 17,  name_level_grade = "upper_secondary_grade_12")
     # )
 ) {
   
- 
-  
+
   #------ Enquos and checks
   edu_cols <- rlang::enquos(education_access, education_disrupted_climate, education_disrupted_teacher, education_disrupted_displaced, education_disrupted_occupation)
   edu_cols <- purrr::map_chr(edu_cols, rlang::as_name)
@@ -162,17 +161,33 @@ roster_education_core_function <- function(
   # Check and use the provided school information or build it from user input
   if (!is.null(summary_info_school) && !is.null(levels_grades_ages)) {
     message("Using predefined data frames for school cycle information.")
+    
+    levels_grades_ages <- levels_grades_ages %>%
+      dplyr::mutate(limit_age = starting_age + 2)
+      
+    
   } else if (!is.null(school_info) && length(school_info) > 0) {
     message("Building data frames from user-defined school information.")
+    
+    
+    # Predefine column names for consistency
+    col_names <- c("level_code", "name_level", "grade", "starting_age", "name_level_grade", "limit_age")
+    
+    # Convert list to data frame while ensuring all items have the same structure
+    school_info_df <- do.call(rbind, lapply(school_info, function(x) {
+      x_df <- data.frame(matrix(ncol = length(col_names), nrow = 1))
+      colnames(x_df) <- col_names
+      
+      if (!is.null(x)) {
+        x_df[1, names(x)] <- unlist(x)
+      }
+      
+      # Convert to proper types
+      x_df$starting_age <- as.numeric(x_df$starting_age)
+      x_df$limit_age <- as.numeric(x_df$starting_age) + 2
+      return(x_df)
+    }))
 
-    # Convert list to data frame
-    school_info_df <- do.call(rbind, lapply(school_info, function(x) data.frame(t(unlist(x)), stringsAsFactors = FALSE)))
-    colnames(school_info_df) <- c("level_code", "name_level", "grade", "starting_age", "limit_age", "name_level_grade")
-    
-    # Ensure numeric columns are correctly typed
-    school_info_df$starting_age <- as.numeric(school_info_df$starting_age)
-    school_info_df$limit_age <- as.numeric(school_info_df$limit_age)
-    
     # Build levels_grades_ages equivalent
     levels_grades_ages <- school_info_df
     
@@ -180,9 +195,16 @@ roster_education_core_function <- function(
     summary_info_school <- school_info_df %>%
       group_by(level_code, name_level) %>%
       summarise(starting_age = min(starting_age), duration = n_distinct(grade), .groups = "drop") %>%
-      mutate(ending_age = starting_age + duration - 1) # Adjust as per your logic
+      ungroup() %>%
+      mutate(
+        ending_age = if_else(
+          level_code == max(level_code), # Check if it's the last level
+          starting_age + duration,      # For the last level
+          starting_age + duration - 1    # For all other levels
+        )
+      )
     
-    
+
   } else {
     stop("No valid school information provided.")
   }
@@ -192,7 +214,7 @@ roster_education_core_function <- function(
   print(summary_info_school)
 
 
-  roster <- left_join(roster, levels_grades_ages, by = "name_level_grade") %>%
+  roster <- left_join(roster, levels_grades_ages, by = "name_level_grade") %>% 
     select(uuid, person_id, everything(), -name_level_grade)
 
   #Adjusting level_code, name_level, and grade Based on education_access
@@ -207,30 +229,37 @@ roster_education_core_function <- function(
   #------ Dynamically create info data frames for each school level based on the number of levels
   school_level_infos <- list()
 
-
-
   # Extract unique level codes sorted if needed
-  unique_levels <- sort(unique(summary_school_levels$`level code`))
-
-  for (level_code in unique_levels) {
-    # Extract relevant information for each level
-    level_info <- summary_school_levels %>%
-      filter(`level code` == level_code) %>%
-      summarise(starting_age = min(starting_age),
-                ending_age = max(starting_age) + max(duration) - 1) %>%
-      mutate(level = level_code) %>%
-      select(level, starting_age, ending_age)
-
-    # Store the extracted info in a list
-    school_level_infos[[level_code]] <- level_info
+  unique_levels <- sort(unique(summary_info_school$level_code))
+  
+  # Iterate through each row of summary_info_school to populate school_level_infos
+  for (i in seq_len(nrow(summary_info_school))) {
+    level_info <- summary_info_school[i, ]
+    level_code <- level_info$level_code
+    
+    # Create a list for each level with the required information
+    school_level_info <- list(
+      level = level_code,
+      starting_age = level_info$starting_age,
+      ending_age = if_else(level_info$level_code == max(summary_info_school$level_code),
+                           level_info$starting_age + level_info$duration, # If it's the last level, do not subtract 1
+                           level_info$ending_age) # For all other levels, use the ending_age as is
+    )
+    
+    # Assign to school_level_infos using level_code as the name
+    school_level_infos[[level_code]] <- school_level_info
   }
 
 
+  print(school_level_infos)
   # Ensure continuous age ranges between levels and all levels being present
   validate_age_continuity_and_levels(school_level_infos, unique_levels)
-
-
-
+  validate_level_code_name_consistency(summary_info_school)
+  validate_grade_continuity_within_levels(levels_grades_ages)
+  
+  
+  
+  
   ## ----- adding clear STRATA columsn
   roster <- roster %>%
     mutate(stratum_school_cycle_level_age_category = case_when(
@@ -267,18 +296,7 @@ roster_education_core_function <- function(
 
   filtered_levels <- unique_levels[-1]
 
-  for (level in filtered_levels) {
 
-    accessing_level_col_name <- paste0(level, "_accessing")
-    roster[[accessing_level_col_name]]  <-  if_else(roster[['level_code']] == level, 1, 0, missing = NA_integer_)
-
-    genders <- c("girl" = 2, "boy" = 1)
-    for (gender in names(genders)) {
-      gender_val <- genders[gender]
-      accessing_level_gender_col_name <- paste0(accessing_level_col_name, "_", gender)
-      roster[[accessing_level_gender_col_name]]  <-  if_else(roster[['level_code']] == level & roster[[ind_gender_col]] == gender_val, 1, 0, missing = NA_integer_)
-    }
-  }
 
 #level_code == level
 
@@ -286,14 +304,12 @@ roster_education_core_function <- function(
     # Extract info for current level
     starting_age <- as.numeric(school_level_infos[[level]]$starting_age)
     ending_age <- as.numeric(school_level_infos[[level]]$ending_age)
-    # if (level == tail(filtered_levels, n = 1)) {
-    #   ending_age <- ending_age + 1  # Adjust for last level
-    # }
+   
 
     # Define dynamic column names
     age_col_name <- paste0(level, "_age")
     age_accessing_col_name <- paste0(level, "_age_accessing")
-    age_non_accessing_col_name <- paste0(level, "_NON_accessing")
+    age_non_accessing_col_name <- paste0(level, "_age_NON_accessing")
 
     roster[[age_col_name]] <- ifelse(roster[[true_age_col]] >= starting_age & roster[[true_age_col]] <= ending_age, 1, 0)
     roster[[age_accessing_col_name]] <- ifelse(roster[[age_col_name]] == 1 & roster[[education_access_col]] == 1, 1, 0)
@@ -312,7 +328,6 @@ roster_education_core_function <- function(
       roster[[non_accessing_gender_col_name]] <- roster[[age_gender_col_name]] - roster[[accessing_gender_col_name]]
     }
   }
-
 
   # adding the indicators for the single year before of the starting of the primary school
   roster <- roster %>%
@@ -358,6 +373,20 @@ roster_education_core_function <- function(
       roster[[attending_gender_col_name]] <- ifelse(  roster[[true_age_col]] >= starting_age & roster[[true_age_col]] <= ending_age & as.integer(as.factor(roster$level_code)) >= as.integer(as.factor(level)) & roster[[ind_gender_col]] == gender_val,1, 0 )
     }
 
+  }
+
+  ## --- denominators for overage learners
+
+  for (level in filtered_levels) {
+    accessing_level_col_name <- paste0('attending_',level)
+    roster[[accessing_level_col_name]]  <-  if_else(roster[['level_code']] == level, 1, 0, missing = NA_integer_)
+
+    genders <- c("girl" = 2, "boy" = 1)
+    for (gender in names(genders)) {
+      gender_val <- genders[gender]
+      accessing_level_gender_col_name <- paste0(accessing_level_col_name, "_", gender)
+      roster[[accessing_level_gender_col_name]]  <-  if_else(roster[['level_code']] == level & roster[[ind_gender_col]] == gender_val, 1, 0, missing = NA_integer_)
+    }
   }
 
   # overage learners
@@ -440,19 +469,19 @@ modified_roster <- roster_education_core_function(roster, household_data,
                                                   #summary_school_levels,
                                                   #levels_grades_age_ranges,
                                                   school_info = list(
-                                                    list(level_code = "level0", name_level = "early childhood education", grade = NA, starting_age = 5, limit_age = 7, name_level_grade = "early_childhood_education"),
-                                                    list(level_code = "level1", name_level = "primary", grade = "grade 1", starting_age = 6, limit_age = 8, name_level_grade = "primary_grade_1"),
-                                                    list(level_code = "level1", name_level = "primary", grade = "grade 2", starting_age = 7, limit_age = 9, name_level_grade = "primary_grade_2"),
-                                                    list(level_code = "level1", name_level = "primary", grade = "grade 3", starting_age = 8, limit_age = 10, name_level_grade = "primary_grade_3"),
-                                                    list(level_code = "level1", name_level = "primary", grade = "grade 4", starting_age = 9, limit_age = 11, name_level_grade = "primary_grade_4"),
-                                                    list(level_code = "level1", name_level = "primary", grade = "grade 5", starting_age = 10, limit_age = 12, name_level_grade = "primary_grade_5"),
-                                                    list(level_code = "level1", name_level = "primary", grade = "grade 6", starting_age = 11, limit_age = 13, name_level_grade = "primary_grade_6"),
-                                                    list(level_code = "level2", name_level = "lower secondary", grade = "grade 7", starting_age = 12, limit_age = 14, name_level_grade = "lower_secondary_grade_7"),
-                                                    list(level_code = "level2", name_level = "lower secondary", grade = "grade 8", starting_age = 13, limit_age = 15, name_level_grade = "lower_secondary_grade_8"),
-                                                    list(level_code = "level2", name_level = "lower secondary", grade = "grade 9", starting_age = 14, limit_age = 16, name_level_grade = "lower_secondary_grade_9"),
-                                                    list(level_code = "level3", name_level = "upper secondary", grade = "grade 10", starting_age = 15, limit_age = 17, name_level_grade = "upper_secondary_grade_10"),
-                                                    list(level_code = "level3", name_level = "upper secondary", grade = "grade 11", starting_age = 16, limit_age = 18, name_level_grade = "upper_secondary_grade_11"),
-                                                    list(level_code = "level4", name_level = "upper secondary", grade = "grade 12", starting_age = 17, limit_age = 19, name_level_grade = "upper_secondary_grade_12")
+                                                    list(level_code = "level0", name_level = "early childhood education", grade = NA, starting_age = 5,  name_level_grade = "early_childhood_education"),
+                                                    list(level_code = "level1", name_level = "primary", grade = "grade 1", starting_age = 6,  name_level_grade = "primary_grade_1"),
+                                                    list(level_code = "level1", name_level = "primary", grade = "grade 2", starting_age = 7, name_level_grade = "primary_grade_2"),
+                                                    list(level_code = "level1", name_level = "primary", grade = "grade 3", starting_age = 8, name_level_grade = "primary_grade_3"),
+                                                    list(level_code = "level1", name_level = "primary", grade = "grade 4", starting_age = 9, name_level_grade = "primary_grade_4"),
+                                                    list(level_code = "level1", name_level = "primary", grade = "grade 5", starting_age = 10, name_level_grade = "primary_grade_5"),
+                                                    list(level_code = "level1", name_level = "primary", grade = "grade 6", starting_age = 11, name_level_grade = "primary_grade_6"),
+                                                    list(level_code = "level2", name_level = "lower secondary", grade = "grade 7", starting_age = 12,  name_level_grade = "lower_secondary_grade_7"),
+                                                    list(level_code = "level2", name_level = "lower secondary", grade = "grade 8", starting_age = 13,  name_level_grade = "lower_secondary_grade_8"),
+                                                    list(level_code = "level2", name_level = "lower secondary", grade = "grade 9", starting_age = 14,  name_level_grade = "lower_secondary_grade_9"),
+                                                    list(level_code = "level3", name_level = "upper secondary", grade = "grade 10", starting_age = 15,  name_level_grade = "upper_secondary_grade_10"),
+                                                    list(level_code = "level3", name_level = "upper secondary", grade = "grade 11", starting_age = 16,  name_level_grade = "upper_secondary_grade_11"),
+                                                    list(level_code = "level3", name_level = "upper secondary", grade = "grade 12", starting_age = 17,  name_level_grade = "upper_secondary_grade_12")
                                                   )
 )
 
