@@ -33,6 +33,11 @@ pacman::p_load(tidyverse,
                       guess_max = 50000,
                       na = c("NA","#N/A",""," ","N/A"),
                       sheet = 'edu loop')
+  
+  wgss <- read_xlsx(file_name,
+                      guess_max = 50000,
+                      na = c("NA","#N/A",""," ","N/A"),
+                      sheet = 'wgss')
  
 
 
@@ -40,7 +45,7 @@ pacman::p_load(tidyverse,
 # Use the functions
 school_variables_sheet    <- read_xlsx('contextspecific/context_info.xlsx', sheet = "School levels and grades")
 file_school_cycle <- "contextspecific/UNESCO ISCED Mappings_MSNAcountries_consolidated.xlsx"
-country_assessment <- "CAR" # Can input either country code or name, case-insensitive
+country_assessment <- "SYR" # Can input either country code or name, case-insensitive
 
 
 info_country_school_structure <- read_school_level_grade_age(file_school_cycle, country_assessment)
@@ -56,6 +61,7 @@ print(levels_grades_age_ranges)
 roster_education_core_function <- function(
     roster,
     household_data,
+    roster_wgss = NULL, #roster containing the WGSS data, if the WGSS data were collected. If the WGSS indicatros are included in the same roster loop, please re-write here the roster df
     representative_admin_level = 'admin1',
     pop_group = 'status',
     ind_age = 'ind_age',
@@ -71,7 +77,7 @@ roster_education_core_function <- function(
     beginning_data_collection = 'may',
     summary_info_school = NULL,# level code, Learning Level, starting age, duration
     levels_grades_ages = NULL,# level code, Learning Level, Year/Grade, Theoretical Start age, limit age
-    school_info = NULL # input customized by the user
+    school_info = NULL, # input customized by the user
     # Example
     # school_info = list(
     #   list(level_code = "level0", name_level = "early childhood education", grade = NA, starting_age = 5, limit_age = 7, name_level_grade = "early_childhood_education"),
@@ -88,46 +94,78 @@ roster_education_core_function <- function(
     #   list(level_code = "level3", name_level = "upper secondary", grade = "grade 11", starting_age = 16,  name_level_grade = "upper_secondary_grade_11"),
     #   list(level_code = "level4", name_level = "upper secondary", grade = "grade 12", starting_age = 17,  name_level_grade = "upper_secondary_grade_12")
     # )
+    disability_seeing = NULL,
+    disability_hearing = NULL,
+    disability_walking = NULL,
+    disability_remembering = NULL,
+    disability_selfcare = NULL,
+    disability_communicating = NULL,
+    severity_labeling = NULL
+    # Example
+    # severity_labeling = list(no_difficulty = 'no_difficulty' , some_difficulty = 'some_difficulty',  a_lot_of_difficulty = 'a_lot_of_difficulty', cannot_do_at_all = 'cannot_do_at_all')
 ) {
   
+  ## Rapid integration of the education loop and WGSS loop, should the latter be present in the assessed country
+  if (!is.null(roster_wgss)) {
+    # Compare data frames to check if they are different
+    if (!isTRUE(all.equal(roster, roster_wgss, check.attributes = FALSE))) {
+      # They are different; identify unique columns in roster_wgss not present in roster
+      unique_columns_wgss <- setdiff(names(roster_wgss), names(roster))
+      
+      # Ensure there's a 'person_id' column in unique_columns_wgss to join on
+      if ("person_id" %in% unique_columns_wgss) {
+        unique_columns_wgss <- setdiff(unique_columns_wgss, "person_id")
+      }
+      
+      # Join only the unique columns from roster_wgss to roster
+      if (length(unique_columns_wgss) > 0) {
+        roster <- dplyr::left_join(roster, roster_wgss[c("person_id", unique_columns_wgss)], by = "person_id")
+      }
+    } else {
+      # They are the same; do not do anything more
+      message("roster and roster_wgss are identical. No further action taken.")
+    }
+  }
 
   #------ Enquos and checks
   edu_cols <- rlang::enquos(education_access, education_disrupted_climate, education_disrupted_teacher, education_disrupted_displaced, education_disrupted_occupation)
   edu_cols <- purrr::map_chr(edu_cols, rlang::as_name)
-  
-  ind_age_col <- rlang::as_name(rlang::enquo(ind_age)) 
-  ind_gender_col <- rlang::as_name(rlang::enquo(ind_gender)) 
-  
-  admin_col <- rlang::as_name(rlang::enquo(representative_admin_level)) 
-  status_col <- rlang::as_name(rlang::enquo(pop_group)) 
-  
-  
+
+  ind_age_col <- rlang::as_name(rlang::enquo(ind_age))
+  ind_gender_col <- rlang::as_name(rlang::enquo(ind_gender))
+
+  admin_col <- rlang::as_name(rlang::enquo(representative_admin_level))
+  status_col <- rlang::as_name(rlang::enquo(pop_group))
+
+
   #-- Check if in_age exist
   if_not_in_stop(roster, ind_age_col, "roster")
   if_not_in_stop(roster, edu_cols, "roster")
-  
+
   are_cols_numeric (roster, ind_age_col)
-  
-  
-  #------ modify yes/no to numeric variables --> 
+
+
+  #------ modify yes/no to numeric variables -->
   #-- yes = 1
   #-- no = 0
   roster <- modify_column_value_yes_no(roster, edu_cols)
-  
-  #------ standardize the gender labels --> 
+
+  #------ standardize the gender labels -->
   #-- female/femme = girl
   #-- male/home = boy
   roster <- modify_gender_values(roster, ind_gender_col)
-  
+
   ## ---- adding info from HH data
   roster <- roster %>%
     left_join(select(household_data, uuid, weight, !!admin_col, !!status_col), by = "uuid")
-  
-  
+
+
+
+
   #------ compute the logic variable for the age correction and Add new corrected age column to the roster
   # TRUE --> more than 6 months difference between start of the school and data collection
   # TRUE --> new age columns with (ind_age - 1)
-  age_correction  <- calculate_age_correction(start_school_year, beginning_data_collection)  
+  age_correction  <- calculate_age_correction(start_school_year, beginning_data_collection)
   #
   roster <- dplyr::mutate(
     roster,
@@ -138,21 +176,21 @@ roster_education_core_function <- function(
     )
   )
   true_age_col <- "corrected_ind_age"  # Direct assignment
-  
+
   education_access_col <- "education_access"
   education_level_grades_col <- education_level_grade
-  
-  
+
+
   # Apply the safe_rename function to each column you want to rename
   roster <- safe_rename(roster, education_disrupted_climate, "education_disrupted_climate")
   roster <- safe_rename(roster, education_disrupted_teacher, "education_disrupted_teacher")
   roster <- safe_rename(roster, education_disrupted_displaced, "education_disrupted_displaced")
   roster <- safe_rename(roster, education_disrupted_occupation, "education_disrupted_occupation")
- 
-  
+
+
   roster <- safe_rename(roster, admin_col, "stratum_admin")
   roster <- safe_rename(roster, status_col, "stratum_status")
-  
+
 
   ## ------ Modify the data set to have clear level and grade definition and the recorded limit for the matching ages
   roster <- roster %>%
@@ -161,36 +199,50 @@ roster_education_core_function <- function(
   # Check and use the provided school information or build it from user input
   if (!is.null(summary_info_school) && !is.null(levels_grades_ages)) {
     message("Using predefined data frames for school cycle information.")
-    
+
     levels_grades_ages <- levels_grades_ages %>%
       dplyr::mutate(limit_age = starting_age + 2)
-      
     
+    # Build summary_info_school equivalent
+    summary_info_school <- summary_info_school %>%
+      mutate(
+        ending_age = if_else(
+          level_code == max(level_code), # Check if it's the last level
+          starting_age + duration,      # For the last level
+          starting_age + duration - 1    # For all other levels
+        )
+      )
+    
+    
+
   } else if (!is.null(school_info) && length(school_info) > 0) {
     message("Building data frames from user-defined school information.")
-    
-    
+
+
     # Predefine column names for consistency
     col_names <- c("level_code", "name_level", "grade", "starting_age", "name_level_grade", "limit_age")
-    
+
     # Convert list to data frame while ensuring all items have the same structure
     school_info_df <- do.call(rbind, lapply(school_info, function(x) {
       x_df <- data.frame(matrix(ncol = length(col_names), nrow = 1))
       colnames(x_df) <- col_names
-      
+
       if (!is.null(x)) {
         x_df[1, names(x)] <- unlist(x)
       }
-      
+
       # Convert to proper types
       x_df$starting_age <- as.numeric(x_df$starting_age)
       x_df$limit_age <- as.numeric(x_df$starting_age) + 2
       return(x_df)
     }))
-
+    
+    print('------')
+    print(school_info_df)
+    
     # Build levels_grades_ages equivalent
     levels_grades_ages <- school_info_df
-    
+
     # Build summary_info_school equivalent
     summary_info_school <- school_info_df %>%
       group_by(level_code, name_level) %>%
@@ -203,19 +255,39 @@ roster_education_core_function <- function(
           starting_age + duration - 1    # For all other levels
         )
       )
-    
+
 
   } else {
     stop("No valid school information provided.")
   }
-  
-  
+
+
   print(levels_grades_ages)
   print(summary_info_school)
 
-
-  roster <- left_join(roster, levels_grades_ages, by = "name_level_grade") %>% 
-    select(uuid, person_id, everything(), -name_level_grade)
+  # Perform a left join to merge additional details from levels_grades_ages into roster based on matching 'name_level_grade' values.
+  # Utilize 'anti_join' to find and isolate records in roster that do not have a corresponding match in levels_grades_ages based on 'name_level_grade'.
+  # If unmatched grades are found, a warning message is then constructed to alert the user, explicitly listing all unique unmatched 'name_level_grade' values found
+  roster <- left_join(roster, levels_grades_ages, by = "name_level_grade") %>%
+    select(uuid, person_id, everything())
+  
+  # Find rows in roster where name_level_grade does not match levels_grades_ages and is not NA
+  unmatched_grades <- anti_join(roster, levels_grades_ages, by = "name_level_grade") %>%
+    filter(!is.na(name_level_grade) & name_level_grade != "")
+  
+  # Check if there are any unmatched grades and warn
+  if (nrow(unmatched_grades) > 0) {
+    # Get a list of unique unmatched name_level_grade values
+    unmatched_list <- unique(unmatched_grades$name_level_grade)
+    
+    # Create a warning message that includes the list of unmatched name_level_grade values
+    warning_message <- sprintf("A level and grade were recorded in the data that are not present in the list of levels and grades coded for the country. Please review the unmatched 'name_level_grade' values: %s",
+                               paste(unmatched_list, collapse = ", "))
+    
+    warning(warning_message)
+  }
+  
+  
 
   #Adjusting level_code, name_level, and grade Based on education_access
   roster <- roster %>%
@@ -231,12 +303,12 @@ roster_education_core_function <- function(
 
   # Extract unique level codes sorted if needed
   unique_levels <- sort(unique(summary_info_school$level_code))
-  
+
   # Iterate through each row of summary_info_school to populate school_level_infos
   for (i in seq_len(nrow(summary_info_school))) {
     level_info <- summary_info_school[i, ]
     level_code <- level_info$level_code
-    
+
     # Create a list for each level with the required information
     school_level_info <- list(
       level = level_code,
@@ -245,7 +317,7 @@ roster_education_core_function <- function(
                            level_info$starting_age + level_info$duration, # If it's the last level, do not subtract 1
                            level_info$ending_age) # For all other levels, use the ending_age as is
     )
-    
+
     # Assign to school_level_infos using level_code as the name
     school_level_infos[[level_code]] <- school_level_info
   }
@@ -256,11 +328,11 @@ roster_education_core_function <- function(
   validate_age_continuity_and_levels(school_level_infos, unique_levels)
   validate_level_code_name_consistency(summary_info_school)
   validate_grade_continuity_within_levels(levels_grades_ages)
-  
-  
-  
-  
-  ## ----- adding clear STRATA columsn
+
+
+
+
+  ## ----- adding clear STRATA columns
   roster <- roster %>%
     mutate(stratum_school_cycle_level_age_category = case_when(
       between(!!rlang::sym(true_age_col), school_level_infos[['level0']]$starting_age, school_level_infos[['level0']]$ending_age) ~ 'level0_age',
@@ -304,7 +376,7 @@ roster_education_core_function <- function(
     # Extract info for current level
     starting_age <- as.numeric(school_level_infos[[level]]$starting_age)
     ending_age <- as.numeric(school_level_infos[[level]]$ending_age)
-   
+
 
     # Define dynamic column names
     age_col_name <- paste0(level, "_age")
@@ -452,7 +524,7 @@ roster_education_core_function <- function(
 
 
 
-modified_roster <- roster_education_core_function(roster, household_data,
+modified_roster <- roster_education_core_function(roster, household_data, wgss,
                                                   'admin1',
                                                   'status',
                                                   'age_member',
@@ -482,8 +554,17 @@ modified_roster <- roster_education_core_function(roster, household_data,
                                                     list(level_code = "level3", name_level = "upper secondary", grade = "grade 10", starting_age = 15,  name_level_grade = "upper_secondary_grade_10"),
                                                     list(level_code = "level3", name_level = "upper secondary", grade = "grade 11", starting_age = 16,  name_level_grade = "upper_secondary_grade_11"),
                                                     list(level_code = "level3", name_level = "upper secondary", grade = "grade 12", starting_age = 17,  name_level_grade = "upper_secondary_grade_12")
+                                                    ),
+                                                    # 'difficulty_seeing',
+                                                    # 'difficulty_hearing',
+                                                    # 'difficulty_walking',
+                                                    # 'difficulty_remembering',
+                                                    # 'difficulty_self_care',
+                                                    # 'difficulty_communicating',
+                                                    #  severity_labeling = list(no_difficulty = 'no_difficulty' , some_difficulty = 'some_difficulty',  a_lot_of_difficulty = 'a_lot_of_difficulty', cannot_do_at_all = 'cannot_do_at_all')
+
                                                   )
-)
+
 
 
                                

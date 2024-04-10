@@ -50,6 +50,12 @@ read_school_level_grade_age <- function(file_path, country_input) {
       grade = `year-grade`
     )
   
+  df1 <- df1 %>%
+    rename(
+      level_code = `level code`,
+      name_level = `learning level`
+    )
+  
   return(list(df1 = df1, df2 = df2))
 } # Closing bracket for the function
 #--------------------------------------------------------------------------------------------------------
