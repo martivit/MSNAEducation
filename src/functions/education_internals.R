@@ -164,6 +164,11 @@ validate_grade_continuity_within_levels <- function(levels_grades_ages) {
     
     grades_in_level <- filter(levels_grades_ages, level_code == level)
     
+    # If there's only one grade in the level, skip the checks.
+    if (nrow(grades_in_level) < 2) {
+      next
+    }
+    
     # Direct comparison for grades with the same starting_age within a level.
     for (i in 1:(nrow(grades_in_level) - 1)) {
       for (j in (i + 1):nrow(grades_in_level)) {

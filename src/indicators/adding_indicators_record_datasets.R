@@ -42,26 +42,12 @@ pacman::p_load(tidyverse,
 
 
 
-# Use the functions
-school_variables_sheet    <- read_xlsx('contextspecific/context_info.xlsx', sheet = "School levels and grades")
-file_school_cycle <- "contextspecific/UNESCO ISCED Mappings_MSNAcountries_consolidated.xlsx"
-country_assessment <- "SYR" # Can input either country code or name, case-insensitive
-
-
-info_country_school_structure <- read_school_level_grade_age(file_school_cycle, country_assessment)
-
-summary_school_levels <- info_country_school_structure$df1    # DataFrame 1: level code, Learning Level, starting age, duration
-levels_grades_age_ranges <-info_country_school_structure$df2  # DataFrame 2: level code, Learning Level, Year/Grade, Theoretical Start age, limit age
-
-print(summary_school_levels)
-print(levels_grades_age_ranges)
 
 
 
-roster_education_core_function <- function(
+roster_education_core_function <- function(country_assessment = 'BFA',
     roster,
     household_data,
-    roster_wgss = NULL, #roster containing the WGSS data, if the WGSS data were collected. If the WGSS indicatros are included in the same roster loop, please re-write here the roster df
     representative_admin_level = 'admin1',
     pop_group = 'status',
     ind_age = 'ind_age',
@@ -75,25 +61,7 @@ roster_education_core_function <- function(
     education_barrier = 'education_barrier',
     start_school_year = 'september',
     beginning_data_collection = 'may',
-    summary_info_school = NULL,# level code, Learning Level, starting age, duration
-    levels_grades_ages = NULL,# level code, Learning Level, Year/Grade, Theoretical Start age, limit age
-    school_info = NULL, # input customized by the user
-    # Example
-    # school_info = list(
-    #   list(level_code = "level0", name_level = "early childhood education", grade = NA, starting_age = 5, limit_age = 7, name_level_grade = "early_childhood_education"),
-    #   list(level_code = "level1", name_level = "primary", grade = "grade 1", starting_age = 6,  name_level_grade = "primary_grade_1"),
-    #   list(level_code = "level1", name_level = "primary", grade = "grade 2", starting_age = 7,  name_level_grade = "primary_grade_2"),
-    #   list(level_code = "level1", name_level = "primary", grade = "grade 3", starting_age = 8, name_level_grade = "primary_grade_3"),
-    #   list(level_code = "level1", name_level = "primary", grade = "grade 4", starting_age = 9, name_level_grade = "primary_grade_4"),
-    #   list(level_code = "level1", name_level = "primary", grade = "grade 5", starting_age = 10, name_level_grade = "primary_grade_5"),
-    #   list(level_code = "level1", name_level = "primary", grade = "grade 6", starting_age = 11,  name_level_grade = "primary_grade_6"),
-    #   list(level_code = "level2", name_level = "lower secondary", grade = "grade 7", starting_age = 12,  name_level_grade = "lower_secondary_grade_7"),
-    #   list(level_code = "level2", name_level = "lower secondary", grade = "grade 8", starting_age = 13,  name_level_grade = "lower_secondary_grade_8"),
-    #   list(level_code = "level2", name_level = "lower secondary", grade = "grade 9", starting_age = 14,  name_level_grade = "lower_secondary_grade_9"),
-    #   list(level_code = "level3", name_level = "upper secondary", grade = "grade 10", starting_age = 15,  name_level_grade = "upper_secondary_grade_10"),
-    #   list(level_code = "level3", name_level = "upper secondary", grade = "grade 11", starting_age = 16,  name_level_grade = "upper_secondary_grade_11"),
-    #   list(level_code = "level4", name_level = "upper secondary", grade = "grade 12", starting_age = 17,  name_level_grade = "upper_secondary_grade_12")
-    # )
+    roster_wgss = NULL, #roster containing the WGSS data, if the WGSS data were collected. If the WGSS indicatros are included in the same roster loop, please re-write here the roster df
     disability_seeing = NULL,
     disability_hearing = NULL,
     disability_walking = NULL,
@@ -105,8 +73,36 @@ roster_education_core_function <- function(
     # severity_labeling = list(no_difficulty = 'no_difficulty' , some_difficulty = 'some_difficulty',  a_lot_of_difficulty = 'a_lot_of_difficulty', cannot_do_at_all = 'cannot_do_at_all')
 ) {
   
+  # Use the functions
+  school_variables_sheet    <- read_xlsx('contextspecific/context_info.xlsx', sheet = "School levels and grades")
+  file_school_cycle <- "contextspecific/UNESCO ISCED Mappings_MSNAcountries_consolidated.xlsx"
+  country <- country_assessment # Can input either country code or name, case-insensitive
+  info_country_school_structure <- read_school_level_grade_age(file_school_cycle, country)
+  summary_info_school <- info_country_school_structure$df1    # DataFrame 1: level code, Learning Level, starting age, duration
+  levels_grades_ages <-info_country_school_structure$df2  # DataFrame 2: level code, Learning Level, Year/Grade, Theoretical Start age, limit age
+
+  #print(summary_info_school)
+  #print(levels_grades_ages)
+  
+
   ## Rapid integration of the education loop and WGSS loop, should the latter be present in the assessed country
   if (!is.null(roster_wgss)) {
+    print('WGSS dataframe provided')
+
+    expected_disability_columns <- c(disability_seeing, disability_hearing, disability_walking,
+                                     disability_remembering, disability_selfcare, disability_communicating)
+    
+    # Filter out any empty names (in case some parameters were left as default empty strings)
+    expected_disability_columns <- expected_disability_columns[expected_disability_columns != '']
+    
+    # Check if all expected columns are present in roster_wgss
+    missing_columns <- setdiff(expected_disability_columns, names(roster_wgss))
+    
+    if (length(missing_columns) > 0) {
+      # If there are missing columns, issue a warning
+      stop("The following expected disability columns are missing in the WGSS dataset: ", paste(missing_columns, collapse = ", "), ". Execution halted.")
+    }
+    
     # Compare data frames to check if they are different
     if (!isTRUE(all.equal(roster, roster_wgss, check.attributes = FALSE))) {
       # They are different; identify unique columns in roster_wgss not present in roster
@@ -125,6 +121,8 @@ roster_education_core_function <- function(
       # They are the same; do not do anything more
       message("roster and roster_wgss are identical. No further action taken.")
     }
+  }else {
+   print('NO WGSS dataframe provided')
   }
 
   #------ Enquos and checks
@@ -159,9 +157,6 @@ roster_education_core_function <- function(
   roster <- roster %>%
     left_join(select(household_data, uuid, weight, !!admin_col, !!status_col), by = "uuid")
 
-
-
-
   #------ compute the logic variable for the age correction and Add new corrected age column to the roster
   # TRUE --> more than 6 months difference between start of the school and data collection
   # TRUE --> new age columns with (ind_age - 1)
@@ -195,14 +190,11 @@ roster_education_core_function <- function(
   ## ------ Modify the data set to have clear level and grade definition and the recorded limit for the matching ages
   roster <- roster %>%
     rename(!!"name_level_grade" := !!sym(education_level_grades_col))
-
-  # Check and use the provided school information or build it from user input
-  if (!is.null(summary_info_school) && !is.null(levels_grades_ages)) {
-    message("Using predefined data frames for school cycle information.")
-
+  
+ 
     levels_grades_ages <- levels_grades_ages %>%
       dplyr::mutate(limit_age = starting_age + 2)
-    
+
     # Build summary_info_school equivalent
     summary_info_school <- summary_info_school %>%
       mutate(
@@ -212,56 +204,8 @@ roster_education_core_function <- function(
           starting_age + duration - 1    # For all other levels
         )
       )
-    
-    
 
-  } else if (!is.null(school_info) && length(school_info) > 0) {
-    message("Building data frames from user-defined school information.")
-
-
-    # Predefine column names for consistency
-    col_names <- c("level_code", "name_level", "grade", "starting_age", "name_level_grade", "limit_age")
-
-    # Convert list to data frame while ensuring all items have the same structure
-    school_info_df <- do.call(rbind, lapply(school_info, function(x) {
-      x_df <- data.frame(matrix(ncol = length(col_names), nrow = 1))
-      colnames(x_df) <- col_names
-
-      if (!is.null(x)) {
-        x_df[1, names(x)] <- unlist(x)
-      }
-
-      # Convert to proper types
-      x_df$starting_age <- as.numeric(x_df$starting_age)
-      x_df$limit_age <- as.numeric(x_df$starting_age) + 2
-      return(x_df)
-    }))
-    
-    print('------')
-    print(school_info_df)
-    
-    # Build levels_grades_ages equivalent
-    levels_grades_ages <- school_info_df
-
-    # Build summary_info_school equivalent
-    summary_info_school <- school_info_df %>%
-      group_by(level_code, name_level) %>%
-      summarise(starting_age = min(starting_age), duration = n_distinct(grade), .groups = "drop") %>%
-      ungroup() %>%
-      mutate(
-        ending_age = if_else(
-          level_code == max(level_code), # Check if it's the last level
-          starting_age + duration,      # For the last level
-          starting_age + duration - 1    # For all other levels
-        )
-      )
-
-
-  } else {
-    stop("No valid school information provided.")
-  }
-
-
+  
   print(levels_grades_ages)
   print(summary_info_school)
 
@@ -270,24 +214,24 @@ roster_education_core_function <- function(
   # If unmatched grades are found, a warning message is then constructed to alert the user, explicitly listing all unique unmatched 'name_level_grade' values found
   roster <- left_join(roster, levels_grades_ages, by = "name_level_grade") %>%
     select(uuid, person_id, everything())
-  
+
   # Find rows in roster where name_level_grade does not match levels_grades_ages and is not NA
   unmatched_grades <- anti_join(roster, levels_grades_ages, by = "name_level_grade") %>%
     filter(!is.na(name_level_grade) & name_level_grade != "")
-  
+
   # Check if there are any unmatched grades and warn
   if (nrow(unmatched_grades) > 0) {
     # Get a list of unique unmatched name_level_grade values
     unmatched_list <- unique(unmatched_grades$name_level_grade)
-    
+
     # Create a warning message that includes the list of unmatched name_level_grade values
     warning_message <- sprintf("A level and grade were recorded in the data that are not present in the list of levels and grades coded for the country. Please review the unmatched 'name_level_grade' values: %s",
                                paste(unmatched_list, collapse = ", "))
-    
+
     warning(warning_message)
   }
-  
-  
+
+
 
   #Adjusting level_code, name_level, and grade Based on education_access
   roster <- roster %>%
@@ -323,7 +267,7 @@ roster_education_core_function <- function(
   }
 
 
-  print(school_level_infos)
+  #print(school_level_infos)
   # Ensure continuous age ranges between levels and all levels being present
   validate_age_continuity_and_levels(school_level_infos, unique_levels)
   validate_level_code_name_consistency(summary_info_school)
@@ -514,17 +458,77 @@ roster_education_core_function <- function(
   }
 
 
-
-
-
+  if (!is.null(roster_wgss)) {
   
+  ##-----  optional disaggregation according to the level of child disability. 
+  # 2 classifications:
+  ##### 1) WGSS: https://www.washingtongroup-disability.com/fileadmin/uploads/wg/WG_Document__5H_-_Analytic_Guidelines_for_the_WG-SS__Severity_Indicators_-_CSPro_.pdf
+  ##### 2) USE OF WASHINGTON GROUP QUESTIONS IN  MULTI-SECTOR NEEDS ASSESSMENTS: https://acted.sharepoint.com/sites/IMPACT-Public_health/Shared%20Documents/Forms/SOPs%20Folder.aspx?id=%2Fsites%2FIMPACT%2DPublic%5Fhealth%2FShared%20Documents%2FSectors%2FHealth%2FKey%20concepts%2FWashington%20Group%20%28disability%29%2FGuide%5FWGQs%5Fin%5FMSNAs%5Ftoshare%2Epdf&parent=%2Fsites%2FIMPACT%2DPublic%5Fhealth%2FShared%20Documents%2FSectors%2FHealth%2FKey%20concepts%2FWashington%20Group%20%28disability%29&OR=Teams%2DHL&CT=1712755137438&clickparams=eyJBcHBOYW1lIjoiVGVhbXMtRGVza3RvcCIsIkFwcFZlcnNpb24iOiI0OS8yNDAyMjkyNDUxNyIsIkhhc0ZlZGVyYXRlZFVzZXIiOmZhbHNlfQ%3D%3D
+    disability_columns  <- c(disability_seeing, disability_hearing, disability_walking,
+                                     disability_remembering, disability_selfcare, disability_communicating)
+    severity_labeling <- setNames(names(severity_labeling), unlist(severity_labeling))
+    
+    for (col in disability_columns) {
+      if (col %in% names(roster)) { # Check if the column exists
+        for (original_value in names(severity_labeling)) {
+          roster[[col]] <- gsub(pattern = original_value, replacement = severity_labeling[[original_value]], x = roster[[col]])
+        }
+      }
+    }
+    
+    
+    # Add new columns initialized with default values
+    roster$stratum_severity_wgss <- 'none' # Default to none, will adjust based on conditions
+    roster$stratum_severity_cut_off <- 'Disability 0' # Assume a default of no disability, will adjust based on conditions
+    
+    for (i in 1:nrow(roster)) {
+      row <- roster[i, ]
+      
+      # Count the responses for severity classifications
+      cannot_do_at_all_count <- sum(row[disability_columns] == 'cannot_do_at_all')
+      a_lot_of_difficulty_count <- sum(row[disability_columns] == 'a_lot_of_difficulty')
+      some_difficulty_count <- sum(row[disability_columns] == 'some_difficulty')
+      no_difficulty_count <- sum(row[disability_columns] == 'no_difficulty')
+      
+      # severity_wgss classification
+      if (cannot_do_at_all_count >= 1) {
+        roster$stratum_severity_wgss[i] <- 'severe'
+      } else if (a_lot_of_difficulty_count >= 1) {
+        roster$stratum_severity_wgss[i] <- 'moderate'
+      } else if (some_difficulty_count >= 1) {
+        roster$stratum_severity_wgss[i] <- 'milder'
+      } else if (no_difficulty_count == length(disability_columns)) {
+        roster$stratum_severity_wgss[i] <- 'none'
+      }
+      
+      
+      # severity_cut-off classification, we focus on disability 3 
+      # Disability 3
+      if (a_lot_of_difficulty_count >= 1 || cannot_do_at_all_count >= 1) {
+        roster$stratum_severity_cut_off[i] <- 'Disability 3'
+      }
+      # Disability 2
+      else if (some_difficulty_count >= 2 || a_lot_of_difficulty_count >= 1 || cannot_do_at_all_count >= 1) {
+        roster$stratum_severity_cut_off[i] <- 'Disability 2'
+      }
+      # Disability 1
+      else if (some_difficulty_count + a_lot_of_difficulty_count + cannot_do_at_all_count >= 1) {
+        roster$stratum_severity_cut_off[i] <- 'Disability 1'
+      }
+      else  {roster$stratum_severity_cut_off[i] <- 'No disability'}
+     
+      
+    }
+  
+  }
  
   return(roster)
 }## end roster_education_core_function
 
 
 
-modified_roster <- roster_education_core_function(roster, household_data, wgss,
+modified_roster <- roster_education_core_function('HTI',
+                                                  roster, household_data,
                                                   'admin1',
                                                   'status',
                                                   'age_member',
@@ -538,33 +542,16 @@ modified_roster <- roster_education_core_function(roster, household_data, wgss,
                                                   'education_barrier', 
                                                   start_school_year = 'september',
                                                   beginning_data_collection = 'may',
-                                                  #summary_school_levels,
-                                                  #levels_grades_age_ranges,
-                                                  school_info = list(
-                                                    list(level_code = "level0", name_level = "early childhood education", grade = NA, starting_age = 5,  name_level_grade = "early_childhood_education"),
-                                                    list(level_code = "level1", name_level = "primary", grade = "grade 1", starting_age = 6,  name_level_grade = "primary_grade_1"),
-                                                    list(level_code = "level1", name_level = "primary", grade = "grade 2", starting_age = 7, name_level_grade = "primary_grade_2"),
-                                                    list(level_code = "level1", name_level = "primary", grade = "grade 3", starting_age = 8, name_level_grade = "primary_grade_3"),
-                                                    list(level_code = "level1", name_level = "primary", grade = "grade 4", starting_age = 9, name_level_grade = "primary_grade_4"),
-                                                    list(level_code = "level1", name_level = "primary", grade = "grade 5", starting_age = 10, name_level_grade = "primary_grade_5"),
-                                                    list(level_code = "level1", name_level = "primary", grade = "grade 6", starting_age = 11, name_level_grade = "primary_grade_6"),
-                                                    list(level_code = "level2", name_level = "lower secondary", grade = "grade 7", starting_age = 12,  name_level_grade = "lower_secondary_grade_7"),
-                                                    list(level_code = "level2", name_level = "lower secondary", grade = "grade 8", starting_age = 13,  name_level_grade = "lower_secondary_grade_8"),
-                                                    list(level_code = "level2", name_level = "lower secondary", grade = "grade 9", starting_age = 14,  name_level_grade = "lower_secondary_grade_9"),
-                                                    list(level_code = "level3", name_level = "upper secondary", grade = "grade 10", starting_age = 15,  name_level_grade = "upper_secondary_grade_10"),
-                                                    list(level_code = "level3", name_level = "upper secondary", grade = "grade 11", starting_age = 16,  name_level_grade = "upper_secondary_grade_11"),
-                                                    list(level_code = "level3", name_level = "upper secondary", grade = "grade 12", starting_age = 17,  name_level_grade = "upper_secondary_grade_12")
-                                                    ),
-                                                    # 'difficulty_seeing',
-                                                    # 'difficulty_hearing',
-                                                    # 'difficulty_walking',
-                                                    # 'difficulty_remembering',
-                                                    # 'difficulty_self_care',
-                                                    # 'difficulty_communicating',
-                                                    #  severity_labeling = list(no_difficulty = 'no_difficulty' , some_difficulty = 'some_difficulty',  a_lot_of_difficulty = 'a_lot_of_difficulty', cannot_do_at_all = 'cannot_do_at_all')
-
-                                                  )
-
-
+                                                  roster_wgss = wgss,
+                                                  disability_seeing ='difficulty_seeing',
+                                                  disability_hearing ='difficulty_hearing',
+                                                  disability_walking ='difficulty_walking',
+                                                  disability_remembering ='difficulty_remembering',
+                                                  disability_selfcare ='difficulty_self_care',
+                                                  disability_communicating ='difficulty_communicating',
+                                                  severity_labeling = list(no_difficulty = 'none_difficulty', some_difficulty = 'some_difficulty', a_lot_of_difficulty = 'a_lot_of_difficulty', cannot_do_at_all = 'cannot_do_at_all')
+)
 
                                
+# Example
+# severity_labeling = list(no_difficulty = 'no_difficulty' , some_difficulty = 'some_difficulty',  a_lot_of_difficulty = 'a_lot_of_difficulty', cannot_do_at_all = 'cannot_do_at_all')
