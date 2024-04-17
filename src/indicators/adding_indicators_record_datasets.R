@@ -74,7 +74,6 @@ roster_education_core_function <- function(country_assessment = 'BFA',
 ) {
   
   # Use the functions
-  school_variables_sheet    <- read_xlsx('contextspecific/context_info.xlsx', sheet = "School levels and grades")
   file_school_cycle <- "contextspecific/UNESCO ISCED Mappings_MSNAcountries_consolidated.xlsx"
   country <- country_assessment # Can input either country code or name, case-insensitive
   info_country_school_structure <- read_school_level_grade_age(file_school_cycle, country)
@@ -83,6 +82,7 @@ roster_education_core_function <- function(country_assessment = 'BFA',
 
   #print(summary_info_school)
   #print(levels_grades_ages)
+  #level_label_mapping <- setNames(summary_info_school$name_level, summary_info_school$level_code)
   
 
   ## Rapid integration of the education loop and WGSS loop, should the latter be present in the assessed country
@@ -523,34 +523,36 @@ roster_education_core_function <- function(country_assessment = 'BFA',
   }
  
   return(roster)
+  #return(list(roster = roster, level_label_mapping = level_label_mapping))
+  
 }## end roster_education_core_function
 
 
-
-modified_roster <- roster_education_core_function('HTI',
-                                                  roster, household_data,
-                                                  'admin1',
-                                                  'status',
-                                                  'age_member',
-                                                  'sex_member', 
-                                                  'education_access',
-                                                  'education_niveau',
-                                                  'education_disrupted_climate',
-                                                  'education_disrupted_teacher',
-                                                  'education_disrupted_displaced',
-                                                  'education_disrupted_occupation',
-                                                  'education_barrier', 
-                                                  start_school_year = 'september',
-                                                  beginning_data_collection = 'may',
-                                                  roster_wgss = wgss,
-                                                  disability_seeing ='difficulty_seeing',
-                                                  disability_hearing ='difficulty_hearing',
-                                                  disability_walking ='difficulty_walking',
-                                                  disability_remembering ='difficulty_remembering',
-                                                  disability_selfcare ='difficulty_self_care',
-                                                  disability_communicating ='difficulty_communicating',
-                                                  severity_labeling = list(no_difficulty = 'none_difficulty', some_difficulty = 'some_difficulty', a_lot_of_difficulty = 'a_lot_of_difficulty', cannot_do_at_all = 'cannot_do_at_all')
-)
+# 
+# modified_roster <- roster_education_core_function('SYR',
+#                                                   roster, household_data,
+#                                                   'admin1',
+#                                                   'status',
+#                                                   'age_member',
+#                                                   'sex_member',
+#                                                   'education_access',
+#                                                   'education_niveau',
+#                                                   'education_disrupted_climate',
+#                                                   'education_disrupted_teacher',
+#                                                   'education_disrupted_displaced',
+#                                                   'education_disrupted_occupation',
+#                                                   'education_barrier',
+#                                                   start_school_year = 'september',
+#                                                   beginning_data_collection = 'may',
+#                                                   roster_wgss = wgss,
+#                                                   disability_seeing ='difficulty_seeing',
+#                                                   disability_hearing ='difficulty_hearing',
+#                                                   disability_walking ='difficulty_walking',
+#                                                   disability_remembering ='difficulty_remembering',
+#                                                   disability_selfcare ='difficulty_self_care',
+#                                                   disability_communicating ='difficulty_communicating',
+#                                                   severity_labeling = list(no_difficulty = 'none_difficulty', some_difficulty = 'some_difficulty', a_lot_of_difficulty = 'a_lot_of_difficulty', cannot_do_at_all = 'cannot_do_at_all')
+# )
 
                                
 # Example
