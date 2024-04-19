@@ -371,6 +371,7 @@ roster_education_core_function <- function(country_assessment = 'BFA',
   # adding the indicators for Net attendance rate (adjusted)
   level_numeric <- seq_along(filtered_levels)
   names(level_numeric) <- filtered_levels
+  
 
   for (level in filtered_levels) {
     starting_age <- as.numeric(school_level_infos[[level]]$starting_age)
@@ -379,14 +380,15 @@ roster_education_core_function <- function(country_assessment = 'BFA',
     higher_levels_numeric <- gsub("level", "",  paste(filtered_levels[which(filtered_levels >= level)], collapse = ""))
     attending_col_name <- paste0("attending_level", higher_levels_numeric, "_and_", level, "_age")
     #
-    roster[[attending_col_name]] <- ifelse(  roster[[true_age_col]] >= starting_age & roster[[true_age_col]] <= ending_age & as.integer(as.factor(roster$level_code)) >= as.integer(as.factor(level)),1, 0 )
+    roster[[attending_col_name]] <- ifelse(  roster[[true_age_col]] >= starting_age & roster[[true_age_col]] <= ending_age & as.integer(as.factor(roster$level_code)) >= level_numeric[[level]],1, 0 )
 
+    #print(paste0(roster$uuid, ":  analysing level: ",level, "  ", attending_col_name, '--> ',roster$level_code, ":  ",as.integer(as.factor(roster$level_code)), '-', level_numeric[[level]], '  = ', roster[[attending_col_name]], ' (', roster[[true_age_col]] >= starting_age & roster[[true_age_col]] <= ending_age , ")      ", as.integer(as.factor(roster$level_code)), '  >=   ', level_numeric[[level]], '   check   ', roster$stratum_school_cycle_level_age_category))
     genders <- c("girl" = 2, "boy" = 1)
     for (gender in names(genders)) {
       gender_val <- genders[gender]
       attending_gender_col_name <- paste0(attending_col_name, "_", gender)
       # Direct assignment for gender-specific conditions
-      roster[[attending_gender_col_name]] <- ifelse(  roster[[true_age_col]] >= starting_age & roster[[true_age_col]] <= ending_age & as.integer(as.factor(roster$level_code)) >= as.integer(as.factor(level)) & roster[[ind_gender_col]] == gender_val,1, 0 )
+      roster[[attending_gender_col_name]] <- ifelse(  roster[[true_age_col]] >= starting_age & roster[[true_age_col]] <= ending_age & as.integer(as.factor(roster$level_code)) >= level_numeric[[level]] & roster[[ind_gender_col]] == gender_val,1, 0 )
     }
 
   }
@@ -459,15 +461,15 @@ roster_education_core_function <- function(country_assessment = 'BFA',
 
 
   if (!is.null(roster_wgss)) {
-  
-  ##-----  optional disaggregation according to the level of child disability. 
+
+  ##-----  optional disaggregation according to the level of child disability.
   # 2 classifications:
   ##### 1) WGSS: https://www.washingtongroup-disability.com/fileadmin/uploads/wg/WG_Document__5H_-_Analytic_Guidelines_for_the_WG-SS__Severity_Indicators_-_CSPro_.pdf
   ##### 2) USE OF WASHINGTON GROUP QUESTIONS IN  MULTI-SECTOR NEEDS ASSESSMENTS: https://acted.sharepoint.com/sites/IMPACT-Public_health/Shared%20Documents/Forms/SOPs%20Folder.aspx?id=%2Fsites%2FIMPACT%2DPublic%5Fhealth%2FShared%20Documents%2FSectors%2FHealth%2FKey%20concepts%2FWashington%20Group%20%28disability%29%2FGuide%5FWGQs%5Fin%5FMSNAs%5Ftoshare%2Epdf&parent=%2Fsites%2FIMPACT%2DPublic%5Fhealth%2FShared%20Documents%2FSectors%2FHealth%2FKey%20concepts%2FWashington%20Group%20%28disability%29&OR=Teams%2DHL&CT=1712755137438&clickparams=eyJBcHBOYW1lIjoiVGVhbXMtRGVza3RvcCIsIkFwcFZlcnNpb24iOiI0OS8yNDAyMjkyNDUxNyIsIkhhc0ZlZGVyYXRlZFVzZXIiOmZhbHNlfQ%3D%3D
     disability_columns  <- c(disability_seeing, disability_hearing, disability_walking,
                                      disability_remembering, disability_selfcare, disability_communicating)
     severity_labeling <- setNames(names(severity_labeling), unlist(severity_labeling))
-    
+
     for (col in disability_columns) {
       if (col %in% names(roster)) { # Check if the column exists
         for (original_value in names(severity_labeling)) {
@@ -475,21 +477,21 @@ roster_education_core_function <- function(country_assessment = 'BFA',
         }
       }
     }
-    
-    
+
+
     # Add new columns initialized with default values
     roster$stratum_severity_wgss <- 'none' # Default to none, will adjust based on conditions
     roster$stratum_severity_cut_off <- 'Disability 0' # Assume a default of no disability, will adjust based on conditions
-    
+
     for (i in 1:nrow(roster)) {
       row <- roster[i, ]
-      
+
       # Count the responses for severity classifications
       cannot_do_at_all_count <- sum(row[disability_columns] == 'cannot_do_at_all')
       a_lot_of_difficulty_count <- sum(row[disability_columns] == 'a_lot_of_difficulty')
       some_difficulty_count <- sum(row[disability_columns] == 'some_difficulty')
       no_difficulty_count <- sum(row[disability_columns] == 'no_difficulty')
-      
+
       # severity_wgss classification
       if (cannot_do_at_all_count >= 1) {
         roster$stratum_severity_wgss[i] <- 'severe'
@@ -500,9 +502,9 @@ roster_education_core_function <- function(country_assessment = 'BFA',
       } else if (no_difficulty_count == length(disability_columns)) {
         roster$stratum_severity_wgss[i] <- 'none'
       }
-      
-      
-      # severity_cut-off classification, we focus on disability 3 
+
+
+      # severity_cut-off classification, we focus on disability 3
       # Disability 3
       if (a_lot_of_difficulty_count >= 1 || cannot_do_at_all_count >= 1) {
         roster$stratum_severity_cut_off[i] <- 'Disability 3'
@@ -516,10 +518,10 @@ roster_education_core_function <- function(country_assessment = 'BFA',
         roster$stratum_severity_cut_off[i] <- 'Disability 1'
       }
       else  {roster$stratum_severity_cut_off[i] <- 'No disability'}
-     
-      
+
+
     }
-  
+
   }
  
   return(roster)
