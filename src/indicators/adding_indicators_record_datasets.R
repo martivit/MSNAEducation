@@ -74,7 +74,7 @@ roster_education_core_function <- function(country_assessment = 'BFA',
 ) {
   
   # Use the functions
-  file_school_cycle <- "contextspecific/UNESCO ISCED Mappings_MSNAcountries_consolidated.xlsx"
+  file_school_cycle <- "edu_ISCED/UNESCO ISCED Mappings_MSNAcountries_consolidated.xlsx"
   country <- country_assessment # Can input either country code or name, case-insensitive
   info_country_school_structure <- read_school_level_grade_age(file_school_cycle, country)
   summary_info_school <- info_country_school_structure$df1    # DataFrame 1: level code, Learning Level, starting age, duration
@@ -204,7 +204,8 @@ roster_education_core_function <- function(country_assessment = 'BFA',
           starting_age + duration - 1    # For all other levels
         )
       )
-
+  
+    
   
   print(levels_grades_ages)
   print(summary_info_school)
@@ -231,28 +232,27 @@ roster_education_core_function <- function(country_assessment = 'BFA',
     warning(warning_message)
   }
 
-
-
-  #Adjusting level_code, name_level, and grade Based on education_access
+  ## Adjusting level_code, name_level, and grade Based on education_access
+  # If education_access for a record is either NA or 0. the values in level_code, name_level, and grade for that record are set to NA.
+  # This effectively removes specific educational details when there is no access to education, ensuring that subsequent data analysis on these columns only considers valid, relevant educational data.
   roster <- roster %>%
     mutate(across(c(level_code, name_level, grade), ~if_else(is.na(education_access) | education_access == 0, NA_character_, .)))
 
-  # reducing the dataset to contain only school-aged children
+  # IMPORTANT! reducing the dataset to contain only school-aged children
   roster <- roster %>%
     filter(between(!!rlang::sym(true_age_col), 5, 18))
-
-
+  
   #------ Dynamically create info data frames for each school level based on the number of levels
   school_level_infos <- list()
-
+  
   # Extract unique level codes sorted if needed
   unique_levels <- sort(unique(summary_info_school$level_code))
-
+  
   # Iterate through each row of summary_info_school to populate school_level_infos
   for (i in seq_len(nrow(summary_info_school))) {
     level_info <- summary_info_school[i, ]
     level_code <- level_info$level_code
-
+    
     # Create a list for each level with the required information
     school_level_info <- list(
       level = level_code,
@@ -261,7 +261,7 @@ roster_education_core_function <- function(country_assessment = 'BFA',
                            level_info$starting_age + level_info$duration, # If it's the last level, do not subtract 1
                            level_info$ending_age) # For all other levels, use the ending_age as is
     )
-
+    
     # Assign to school_level_infos using level_code as the name
     school_level_infos[[level_code]] <- school_level_info
   }
@@ -293,28 +293,29 @@ roster_education_core_function <- function(country_assessment = 'BFA',
     ))
 
 
+
   roster <- roster %>%
     mutate(
       school_5_18_age = if_else(between(!!rlang::sym(true_age_col), 5, 18), 1, 0, missing = NA_integer_),
-      # For gender-specific calculations, add the gender condition to the logical vector
       school_5_18_age_girl = if_else(between(!!rlang::sym(true_age_col), 5, 18) & !!rlang::sym(ind_gender_col) == 2, 1, 0, missing = NA_integer_),
       school_5_18_age_boy = if_else(between(!!rlang::sym(true_age_col), 5, 18) & !!rlang::sym(ind_gender_col) == 1, 1, 0, missing = NA_integer_),
-      #
-      school_5_18_age_accessing = if_else(between(!!rlang::sym(true_age_col), 5, 18) & !!rlang::sym(education_access_col) == 1, 1, 0, missing = NA_integer_),
+      
+      school_5_18_age_accessing = if_else(between(!!rlang::sym(true_age_col), 5, 18) & coalesce(!!rlang::sym(education_access_col), 0) == 1, 1, 0, missing = NA_integer_),
       school_5_18_age_NON_accessing = school_5_18_age - school_5_18_age_accessing,
-      #
-      school_5_18_age_accessing_girl = if_else(between(!!rlang::sym(true_age_col), 5, 18) & !!rlang::sym(education_access_col) == 1 & !!rlang::sym(ind_gender_col) == 2, 1, 0, missing = NA_integer_),
+      
+      school_5_18_age_accessing_girl = if_else(between(!!rlang::sym(true_age_col), 5, 18) & coalesce(!!rlang::sym(education_access_col), 0) == 1 & !!rlang::sym(ind_gender_col) == 2, 1, 0, missing = NA_integer_),
       school_5_18_age_NON_accessing_girl = school_5_18_age_girl - school_5_18_age_accessing_girl,
-      #
-      school_5_18_age_accessing_boy = if_else(between(!!rlang::sym(true_age_col), 5, 18) & !!rlang::sym(education_access_col) == 1 & !!rlang::sym(ind_gender_col) == 1, 1, 0, missing = NA_integer_),
+      
+      school_5_18_age_accessing_boy = if_else(between(!!rlang::sym(true_age_col), 5, 18) & coalesce(!!rlang::sym(education_access_col), 0) == 1 & !!rlang::sym(ind_gender_col) == 1, 1, 0, missing = NA_integer_),
       school_5_18_age_NON_accessing_boy = school_5_18_age_boy - school_5_18_age_accessing_boy
-      )
-
+    )
+  
+  
+  
   filtered_levels <- unique_levels[-1]
 
 
 
-#level_code == level
 
   for (level in filtered_levels) {
     # Extract info for current level
@@ -529,7 +530,7 @@ roster_education_core_function <- function(country_assessment = 'BFA',
   
 }## end roster_education_core_function
 
-
+# 
 # 
 # modified_roster <- roster_education_core_function('SYR',
 #                                                   roster, household_data,

@@ -93,8 +93,8 @@ wgss_s <- 'stratum_severity_wgss'
 level_label_mapping <- get_level_label_mapping(education_assestment_country)
 
 
-indicator_label_mapping_EN <- c(school_5_18_age_accessing = '% children 5 to 18 y.o. who attended school or any early childhood education program at any time during the 2023-2024 school year',
-                                school_5_18_age_NON_accessing = '% children who  who are not attending any level of education',
+indicator_label_mapping_EN <- c(school_aged_children_accessing = '% children 5 to 18 y.o. who attended school or any early childhood education program at any time during the 2023-2024 school year',
+                                school_aged_children_NON_accessing = '% children who  who are not attending any level of education',
                                 pre_school_age_accessing = 'Percentage of children (one year before the official primary school entry age) who are attending an early childhood education programme or primary school',
                                 early_enrolment = 'Early enrolment in primary grade: Percentage of children in the relevant age group (one year before the official primary school entry age) who are attending primary school',
                                 net_attendance = "Net attendance rate (adjusted) - Percentage of school-aged children of level school age currently attending levels",
@@ -104,15 +104,13 @@ indicator_label_mapping_EN <- c(school_5_18_age_accessing = '% children 5 to 18 
                                 disruption_teacher = '% children 5 to 18 y.o. whose education was disrupted due to teacher s absence during the 2023-2024 school year',
                                 disruption_displaced = '% children 5 to 18 y.o. whose education was disrupted due the school being used as a shelter by IDPs during the 2023-2024 school year',
                                 disruption_occupation = '% children 5 to 18 y.o. whose education was disrupted due the school being occupied by armed groups during the 2023-2024 school year'
-                                
-                                
-                                
+                            
                                    )
 
                                 
                                 
-indicator_den <- c(school_5_18_age_accessing = 'school_5_18_age',
-                   school_5_18_age_NON_accessing = 'school_5_18_age',
+indicator_den <- c(school_aged_children_accessing = 'school_5_18_age',
+                   school_aged_children_NON_accessing = 'school_5_18_age',
                    pre_school_age_accessing  = 'level1_minus_one_age',
                    early_enrolment = 'level1_minus_one_age',
                    net_attendance = 'level1_age',
@@ -126,8 +124,8 @@ indicator_den <- c(school_5_18_age_accessing = 'school_5_18_age',
                    
                    )
 
-indicator_num <- c(school_5_18_age_accessing = 'school_5_18_age_accessing',
-                   school_5_18_age_NON_accessing = 'school_5_18_age_NON_accessing',
+indicator_num <- c(school_aged_children_accessing = 'school_5_18_age_accessing',
+                   school_aged_children_NON_accessing = 'school_5_18_age_NON_accessing',
                    pre_school_age_accessing = 'attending_level0_level1_and_level1_minus_one_age',
                    early_enrolment = 'attending_level1_and_level1_minus_one_age',
                    net_attendance = 'attending_level123_and_level1_age',
@@ -202,11 +200,21 @@ run_edu_analysis_prop <- function(df, den, num, strata_string = NULL) {
 
 
 
-results_school_5_18_age <- list( all =  run_edu_analysis_prop(edu_data, 'school_5_18_age', 'school_5_18_age_accessing'))
+results_school_5_18_age <- list( all =  run_edu_analysis_prop(edu_data, indicator_den[['school_aged_children_accessing']], indicator_num[['school_aged_children_accessing']]))
+
+
+
+
+results_school_pre_school_age_accessing <- list( all =  run_edu_analysis_prop(edu_data, indicator_den[['pre_school_age_accessing']], indicator_num[['pre_school_age_accessing']]))
+
+pippo <-  as_survey(edu_data,  weights = weight)
+result_df <- svy_analysis(design =pippo, analysis = 'prop', 'attending_level0_level1_and_level1_minus_one_age')
+
+
 
 for (stratum in list_strata) {
   # Run the analysis for the current stratum
-  stratum_result <- run_edu_analysis_prop(edu_data, 'school_5_18_age', 'school_5_18_age_accessing', stratum)
+  stratum_result <- run_edu_analysis_prop(edu_data, indicator_den[['school_aged_children_accessing']], indicator_num[['school_aged_children_accessing']], stratum)
   
   # Combine the results
   # Note: Adjust this depending on how you want to combine and what format your results are in
@@ -214,3 +222,37 @@ for (stratum in list_strata) {
 }
 
 combined_results_school_5_18_age <- bind_rows(results_school_5_18_age, .id = "source")
+
+
+
+# Initialize an empty list to hold the results for all indicators.
+all_indicators_results <- list()
+
+# Extract the keys (names) of the indicators from indicator_den or indicator_num (both should have the same keys).
+indicator_keys <- names(indicator_den)
+
+# Loop over each indicator by its key.
+for (indicator_key in indicator_keys) {
+  # Extract the specific denominator and numerator for the current indicator.
+  den <- indicator_den[[indicator_key]]
+  num <- indicator_num[[indicator_key]]
+  
+  # Initialize an empty list to hold results for this indicator.
+  results_for_current_indicator <- list(all = run_edu_analysis_prop(edu_data, den, num))
+
+  # Perform the analysis for each stratum.
+  for (stratum in list_strata) {
+    # Run the analysis for the current stratum.
+    stratum_result <- run_edu_analysis_prop(edu_data, den, num, stratum)
+
+    # Store the result in the list.
+    results_for_current_indicator[[stratum]] <- stratum_result
+  }
+
+  # Combine all stratum results into one, and store it under the indicator_key in the all_indicators_results list.
+  combined_results <- bind_rows(results_for_current_indicator, .id = "source")
+  all_indicators_results[[indicator_key]] <- combined_results
+}
+
+# At this point, all_indicators_results contains the results for all indicators, structured by indicator keys.
+

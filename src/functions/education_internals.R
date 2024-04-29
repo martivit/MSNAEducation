@@ -1,5 +1,5 @@
 
-#------------------------------------------------ Functions to read the "contextspecific/UNESCO ISCED Mappings_MSNAcountries_consolidated.xlsx" and create 2 dataframes with the school-info
+#------------------------------------------------ Functions to read the "edu_ISCED/UNESCO ISCED Mappings_MSNAcountries_consolidated.xlsx" and create 2 dataframes with the school-info
 read_school_level_grade_age <- function(file_path, country_input) {
   # Read the Excel file
   df <- readxl::read_excel(file_path, sheet = "Compiled_Levels_Grades")
@@ -32,11 +32,7 @@ read_school_level_grade_age <- function(file_path, country_input) {
     df1 <- df1 %>%
       mutate(duration = ifelse(`level code` == "level0", duration_level0, duration))
   }
-  
-  # Correctly adjust limit_age to be starting_age + 2 for all entries
-  # country_df <- country_df %>%
-  #   dplyr::mutate(limit_age = `theoretical start age` + 2)
-  
+
   # DataFrame 2: level code, Learning Level, Year/Grade, Theoretical Start age, limit age
   df2 <- country_df %>%
     dplyr::select(`level code`, `learning level`, `year-grade`, `theoretical start age`,  `name -- for kobo`)
@@ -57,8 +53,7 @@ read_school_level_grade_age <- function(file_path, country_input) {
     )
   
   return(list(df1 = df1, df2 = df2))
-} # Closing bracket for the function
-#--------------------------------------------------------------------------------------------------------
+}#--------------------------------------------------------------------------------------------------------
 
 
 #------------------------------------------------ Function to Replace yes/no with 0 and 1
@@ -87,8 +82,7 @@ modify_column_value_yes_no <- function(data, target_cols) {
     mutate(across(all_of(target_cols), as.numeric))
   
   return(data)
-}
-#--------------------------------------------------------------------------------------------------------
+}#--------------------------------------------------------------------------------------------------------
 
 
 #------------------------------------------------ Function to Replace all the different gender labels with 1 == MALE and 2 == FEMALE
@@ -111,13 +105,40 @@ modify_gender_values <- function(data, target_col) {
     ))
   
   return(data)
-}
-#--------------------------------------------------------------------------------------------------------
+}#--------------------------------------------------------------------------------------------------------
+
+
+
+#------------------------------------------------ Function to determine if age correction should be applied
+calculate_age_correction <- function(start_month, collection_month) {
+  month_lookup <- setNames(seq(1, 12), tolower(substr(month.name, 1, 3)))
+  
+  # Convert month names to their numeric equivalents using the predefined lookup
+  start_month_num <- month_lookup[tolower(substr(trimws(start_month), 1, 3))]
+  collection_month_num <- month_lookup[tolower(substr(trimws(collection_month), 1, 3))]
+  
+  # Adjust the start month number for a school year starting in the previous calendar year
+  adjusted_start_month_num <- if(start_month_num > 6) start_month_num - 12 else start_month_num
+  
+  # Determine if the age correction should be applied based on the month difference
+  age_correction <- (collection_month_num - adjusted_start_month_num) > 6
+  return(unname(age_correction))
+}#--------------------------------------------------------------------------------------------------------
+
+
+
+#------------------------------------------------ Functions to safely rename columns if they exist
+safe_rename <- function(dataframe, old_name, new_name) {
+  if(old_name %in% names(dataframe)) {
+    dataframe <- rename(dataframe, !!new_name := !!sym(old_name))
+  }
+  return(dataframe)
+}#--------------------------------------------------------------------------------------------------------
+
 
 
 #------------------------------------------------ Function to Ensure Continuous Age Ranges Between Levels
 validate_age_continuity_and_levels <- function(school_level_infos, required_levels) {
-  # Flatten the list into a single data frame for easier manipulation
   all_levels_df <- bind_rows(school_level_infos, .id = "level")
   # Check for missing levels
   existing_levels <- unique(all_levels_df$level)
@@ -125,10 +146,8 @@ validate_age_continuity_and_levels <- function(school_level_infos, required_leve
   if (length(missing_levels) > 0) {
     stop(sprintf("Missing required educational levels: %s", paste(missing_levels, collapse=", ")), call. = FALSE)
   }
-
   # Sorting might be necessary depending on your data
   all_levels_df <- all_levels_df %>% arrange(starting_age)
-
   # Continue with the continuity check
   for (i in 2:nrow(all_levels_df)) {
     if (all_levels_df$starting_age[i] != all_levels_df$ending_age[i-1] + 1) {
@@ -137,17 +156,13 @@ validate_age_continuity_and_levels <- function(school_level_infos, required_leve
                    all_levels_df$level[i], all_levels_df$starting_age[i]), call. = FALSE)
     }
   }
-
   return(TRUE)
-}
+}#--------------------------------------------------------------------------------------------------------
 
 
 
-
+#------------------------------------------------ Function to Ensure Continuous Age Ranges within Levels
 validate_grade_continuity_within_levels <- function(levels_grades_ages) {
-  # Assuming levels_grades_ages is already a dataframe. If not, convert it properly here.
-  # If levels_grades_ages is the school_info list as provided, first ensure it's correctly converted to a dataframe.
-  
   # Check for and correct any NA or "" column names.
   names(levels_grades_ages) <- ifelse(names(levels_grades_ages) == "" | is.na(names(levels_grades_ages)), paste0("V", 1:ncol(levels_grades_ages)), names(levels_grades_ages))
   
@@ -161,14 +176,12 @@ validate_grade_continuity_within_levels <- function(levels_grades_ages) {
     if (level == "level0") {
       next  # Skip level0 as requested.
     }
-    
     grades_in_level <- filter(levels_grades_ages, level_code == level)
-    
     # If there's only one grade in the level, skip the checks.
     if (nrow(grades_in_level) < 2) {
       next
     }
-    
+ 
     # Direct comparison for grades with the same starting_age within a level.
     for (i in 1:(nrow(grades_in_level) - 1)) {
       for (j in (i + 1):nrow(grades_in_level)) {
@@ -189,30 +202,11 @@ validate_grade_continuity_within_levels <- function(levels_grades_ages) {
   }
   
   return(TRUE)
-}
-# 
-# validate_level_code_name_consistency <- function(levels_grades_ages) {
-#   # Ensure levels_grades_ages is a dataframe
-#   if (!is.data.frame(levels_grades_ages)) {
-#     stop("The input must be a dataframe.")
-#   }
-#   
-#   # Check for inconsistencies in level_code and name_level associations
-#   inconsistent_levels <- levels_grades_ages %>%
-#     group_by(level_code) %>%
-#     summarise(name_levels = list(unique(name_level))) %>%
-#     filter(lengths(name_levels) > 1) %>%
-#     ungroup()
-#   
-#   if (nrow(inconsistent_levels) > 0) {
-#     message("Inconsistency found in level_code and name_level associations. Review the following level_codes for multiple name_level values:")
-#     print(inconsistent_levels)
-#     stop("Validation failed due to inconsistencies in level_code and name_level associations.", call. = FALSE)
-#   } else {
-#     message("All level_code values are consistently associated with a single name_level. Validation passed.")
-#   }
-# }
+}#--------------------------------------------------------------------------------------------------------
 
+
+
+#------------------------------------------------ Function to Ensure consistency between level codes and names 
 validate_level_code_name_consistency <- function(school_level_infos) {
   # Ensure the input is a dataframe
   if (!is.data.frame(school_level_infos)) {
@@ -241,36 +235,10 @@ validate_level_code_name_consistency <- function(school_level_infos) {
   } else {
     message("All level_code values are consistently associated with a single name_level. Validation passed.")
   }
-}
+}#--------------------------------------------------------------------------------------------------------
 
 
 
 
 
 
-#------------------------------------------------ Function to determine if age correction should be applied
-calculate_age_correction <- function(start_month, collection_month) {
-  month_lookup <- setNames(seq(1, 12), tolower(substr(month.name, 1, 3)))
-  
-  # Convert month names to their numeric equivalents using the predefined lookup
-  start_month_num <- month_lookup[tolower(substr(trimws(start_month), 1, 3))]
-  collection_month_num <- month_lookup[tolower(substr(trimws(collection_month), 1, 3))]
-  
-  # Adjust the start month number for a school year starting in the previous calendar year
-  adjusted_start_month_num <- if(start_month_num > 6) start_month_num - 12 else start_month_num
-  
-  # Determine if the age correction should be applied based on the month difference
-  age_correction <- (collection_month_num - adjusted_start_month_num) > 6
-  return(unname(age_correction))
-}
-#--------------------------------------------------------------------------------------------------------
-
-
-#------------------------------------------------ Functions to safely rename columns if they exist
-safe_rename <- function(dataframe, old_name, new_name) {
-  if(old_name %in% names(dataframe)) {
-    dataframe <- rename(dataframe, !!new_name := !!sym(old_name))
-  }
-  return(dataframe)
-}
-#--------------------------------------------------------------------------------------------------------
