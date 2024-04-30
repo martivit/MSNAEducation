@@ -3,7 +3,8 @@ source("src/functions/install_dependencies.R")
 #source("src/functions/read_school_info.R")
 source("src/functions/internals.R")
 source("src/functions/education_internals.R")
-source("src/indicators/adding_indicators_record_datasets.R")
+#source("src/indicators/adding_indicators_record_datasets.R")
+source("src/indicators/test_function.R")
 
 
 pacman::p_load(tidyverse,
@@ -93,17 +94,20 @@ wgss_s <- 'stratum_severity_wgss'
 level_label_mapping <- get_level_label_mapping(education_assestment_country)
 
 
-indicator_label_mapping_EN <- c(school_aged_children_accessing = '% children 5 to 18 y.o. who attended school or any early childhood education program at any time during the 2023-2024 school year',
-                                school_aged_children_NON_accessing = '% children who  who are not attending any level of education',
-                                pre_school_age_accessing = 'Percentage of children (one year before the official primary school entry age) who are attending an early childhood education programme or primary school',
+indicator_label_mapping_EN <- c(school_aged_children_accessing = '% of children 5 to 18 y.o. who attended school or any early childhood education program at any time during the 2023-2024 school year',
+                                school_aged_children_NON_accessing = '% of children who  who are not attending any level of education',
+                                pre_school_age_accessing = '% of children (one year before the official primary school entry age) who are attending an early childhood education programme or primary school',
                                 early_enrolment = 'Early enrolment in primary grade: Percentage of children in the relevant age group (one year before the official primary school entry age) who are attending primary school',
-                                net_attendance = "Net attendance rate (adjusted) - Percentage of school-aged children of level school age currently attending levels",
+                                net_attendance_level1 = "Net attendance rate (adjusted) - Percentage of school-aged children of primary school age currently attending primary, lower or upper secondary school",
+                                net_attendance_level2 = "Net attendance rate (adjusted) - Percentage of school-aged children of lower secondary school age currently attending lower secondary school or higher",
+                                net_attendance_level3 = "Net attendance rate (adjusted) - Percentage of school-aged children of upper secondary school age currently attending upper secondary school or higher",
                                 overage_learners_level1 = 'Percentage of school-aged children attending school who are at least 2 years above the intended age for grade: primary',
                                 overage_learners_level2 = 'Percentage of school-aged children attending school who are at least 2 years above the intended age for grade: lower secondary',
                                 disruption_climate = '% children 5 to 18 y.o. whose education was disrupted due natural hazard during the 2023-2024 school year',
                                 disruption_teacher = '% children 5 to 18 y.o. whose education was disrupted due to teacher s absence during the 2023-2024 school year',
                                 disruption_displaced = '% children 5 to 18 y.o. whose education was disrupted due the school being used as a shelter by IDPs during the 2023-2024 school year',
-                                disruption_occupation = '% children 5 to 18 y.o. whose education was disrupted due the school being occupied by armed groups during the 2023-2024 school year'
+                                disruption_occupation = '% children 5 to 18 y.o. whose education was disrupted due the school being occupied by armed groups during the 2023-2024 school year',
+                                education_barrier = '% children 5 to 18 y.o. not attending school or any early childhood education program at any time during the 2023-2024 school year, by main reason'
                             
                                    )
 
@@ -113,13 +117,16 @@ indicator_den <- c(school_aged_children_accessing = 'school_5_18_age',
                    school_aged_children_NON_accessing = 'school_5_18_age',
                    pre_school_age_accessing  = 'level1_minus_one_age',
                    early_enrolment = 'level1_minus_one_age',
-                   net_attendance = 'level1_age',
+                   net_attendance_level1 = 'level1_age',
+                   net_attendance_level2 = 'level2_age',
+                   net_attendance_level3 = 'level3_age',
                    overage_learners_level1 = 'attending_level1',
                    overage_learners_level2 = 'attending_level2',
                    disruption_climate = 'school_5_18_age',
                    disruption_teacher = 'school_5_18_age',
                    disruption_displaced = 'school_5_18_age',
-                   disruption_occupation = 'school_5_18_age'
+                   disruption_occupation = 'school_5_18_age',
+                   education_barrier = 'school_5_18_age_NON_accessing'
                    
                    
                    )
@@ -128,13 +135,16 @@ indicator_num <- c(school_aged_children_accessing = 'school_5_18_age_accessing',
                    school_aged_children_NON_accessing = 'school_5_18_age_NON_accessing',
                    pre_school_age_accessing = 'attending_level0_level1_and_level1_minus_one_age',
                    early_enrolment = 'attending_level1_and_level1_minus_one_age',
-                   net_attendance = 'attending_level123_and_level1_age',
+                   net_attendance_level1 = 'attending_level123_and_level1_age',
+                   net_attendance_level2 = 'attending_level23_and_level2_age',
+                   net_attendance_level3 = 'attending_level3_and_level3_age',
                    overage_learners_level1 = 'level1_overage_learners',
                    overage_learners_level2 = 'level2_overage_learners',
                    disruption_climate = 'education_disrupted_climate',
                    disruption_teacher = 'education_disrupted_teacher',
                    disruption_displaced = 'education_disrupted_displaced',
-                   disruption_occupation = 'education_disrupted_occupation'
+                   disruption_occupation = 'education_disrupted_occupation',
+                   education_barrier = 'education_barrier'
                    )
 
 

@@ -74,7 +74,7 @@ roster_education_core_function <- function(country_assessment = 'BFA',
 ) {
   
   # Use the functions
-  file_school_cycle <- "edu_ISCED/UNESCO ISCED Mappings_MSNAcountries_consolidated.xlsx"
+  file_school_cycle <- "edu_ISCED/resources/UNESCO ISCED Mappings_MSNAcountries_consolidated.xlsx"
   country <- country_assessment # Can input either country code or name, case-insensitive
   info_country_school_structure <- read_school_level_grade_age(file_school_cycle, country)
   summary_info_school <- info_country_school_structure$df1    # DataFrame 1: level code, Learning Level, starting age, duration

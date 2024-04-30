@@ -1,35 +1,48 @@
-#' @title Prepare dummy variables for education indicators (individual data)
-#'
-#'
-#' @param country_assessment  Can input either country code or name, case-insensitive
-#' @param roster A data frame of individual-level data.
-#' @param household_data A data frame of hh-level data.
-#' @param representative_admin_level Specifies the administrative level at which the desired disaggregation of data will occur
-#' @param pop_group The population group column.
-#' @param ind_age The individual age column.
-#' @param ind_gender The individual gender column.
-#' @param education_access The individual access indicator column.
-#' @param education_level_grade The individual level and grade column.
-#' @param education_disrupted_climate The education disrupted by climate-related hazards such as flood, cyclone, drought or wildfire  column.
-#' @param education_disrupted_teacher The education disrupted by teacher's absence column.
-#' @param education_disrupted_displaced The education disrupted by school used as a shelter by displaced persons column.
-#' @param education_disrupted_occupation The education disrupted by school occupied by armed forces/ non-state armed groups column.
-#' @param education_barrier the barrier column, select one, only for individual analysis.
-#' 
-#' @param start_school_year Character with the name of the month when the school year has started.
-#' @param beginning_data_collection Character with the name of the month when the data collection has started.
-#' 
-#' @param roster_wgss roster containing the WGSS data, if the WGSS data were collected. If the WGSS indicators are included in the same roster loop, please re-write here the roster df
-#' @param disability_seeing wgss variable for sight 
-#' @param disability_hearing wgss variable for hearing 
-#' @param disability_walking wgss variable for motor mobility 
-#' @param disability_remembering wgss variable for remembering 
-#' @param disability_selfcare wgss variable for selfcare 
-#' @param disability_communicating wgss variable for communicating 
-#' @param severity_labeling example severity_labeling = list(no_difficulty = 'no_difficulty' , some_difficulty = 'some_difficulty',  a_lot_of_difficulty = 'a_lot_of_difficulty', cannot_do_at_all = 'cannot_do_at_all')
-#' 
-#' @return X new columns which are essential for the calculation of education indicators
-#' @export
+rm(list = ls())
+source("src/functions/install_dependencies.R")
+#source("src/functions/read_school_info.R")
+source("src/functions/internals.R")
+source("src/functions/education_internals.R")
+
+
+pacman::p_load(tidyverse,
+               hypegrammaR,
+               rio,
+               readxl,
+               openxlsx,
+               sjmisc,
+               dplyr,
+               tibble,
+               tidyr,
+               illuminate,
+               srvyr,
+               purrr,
+               readxl)
+
+
+
+
+file_name <- paste0('input/dataset/', 'data.xlsx')
+
+
+household_data  <- read_xlsx(file_name,
+                             guess_max = 50000,
+                             na = c("NA","#N/A",""," ","N/A"),
+                             sheet = 'HH loop')
+roster <- read_xlsx(file_name,
+                    guess_max = 50000,
+                    na = c("NA","#N/A",""," ","N/A"),
+                    sheet = 'edu loop')
+
+wgss <- read_xlsx(file_name,
+                  guess_max = 50000,
+                  na = c("NA","#N/A",""," ","N/A"),
+                  sheet = 'wgss')
+
+
+
+
+
 
 
 roster_education_core_function <- function(country_assessment = 'BFA',
@@ -59,7 +72,6 @@ roster_education_core_function <- function(country_assessment = 'BFA',
                                            # Example
                                            # severity_labeling = list(no_difficulty = 'no_difficulty' , some_difficulty = 'some_difficulty',  a_lot_of_difficulty = 'a_lot_of_difficulty', cannot_do_at_all = 'cannot_do_at_all')
 ) {
-  
   
   ## ------  retrieving school-cyles-level-grades for the assessed country 
   file_school_cycle <- "edu_ISCED/resources/UNESCO ISCED Mappings_MSNAcountries_consolidated.xlsx"  ## has to be same of: https://acted.sharepoint.com/:x:/r/sites/IMPACT-Humanitarian_Planning_Prioritization/Shared%20Documents/07.%20Other%20sectoral%20resources%20for%20MSNA/01.%20Education/UNESCO%20ISCED%20Mappings_MSNAcountries_consolidated.xlsx?d=w4925184aeff547aa9687d9ce0e00dd70&csf=1&web=1&e=bFlcvr
@@ -275,7 +287,7 @@ roster_education_core_function <- function(country_assessment = 'BFA',
     # Extract info for current level
     starting_age <- as.numeric(school_level_infos[[level]]$starting_age)
     ending_age <- as.numeric(school_level_infos[[level]]$ending_age)
-    
+
     # Define dynamic column names
     age_col_name <- paste0(level, "_age")
     roster[[age_col_name]] <- ifelse(roster[[true_age_col]] >= starting_age & roster[[true_age_col]] <= ending_age, 1, 0)
@@ -382,5 +394,39 @@ roster_education_core_function <- function(country_assessment = 'BFA',
     }
   }
   
+  
   return(roster)
+  #return(list(roster = roster, level_label_mapping = level_label_mapping))
+  
 }## end roster_education_core_function
+
+# 
+# 
+# modified_roster <- roster_education_core_function('SYR',
+#                                                   roster, household_data,
+#                                                   'admin1',
+#                                                   'status',
+#                                                   'age_member',
+#                                                   'sex_member',
+#                                                   'education_access',
+#                                                   'education_niveau',
+#                                                   'education_disrupted_climate',
+#                                                   'education_disrupted_teacher',
+#                                                   'education_disrupted_displaced',
+#                                                   'education_disrupted_occupation',
+#                                                   'education_barrier',
+#                                                   start_school_year = 'september',
+#                                                   beginning_data_collection = 'may',
+#                                                   roster_wgss = wgss,
+#                                                   disability_seeing ='difficulty_seeing',
+#                                                   disability_hearing ='difficulty_hearing',
+#                                                   disability_walking ='difficulty_walking',
+#                                                   disability_remembering ='difficulty_remembering',
+#                                                   disability_selfcare ='difficulty_self_care',
+#                                                   disability_communicating ='difficulty_communicating',
+#                                                   severity_labeling = list(no_difficulty = 'none_difficulty', some_difficulty = 'some_difficulty', a_lot_of_difficulty = 'a_lot_of_difficulty', cannot_do_at_all = 'cannot_do_at_all')
+# )
+
+
+# Example
+# severity_labeling = list(no_difficulty = 'no_difficulty' , some_difficulty = 'some_difficulty',  a_lot_of_difficulty = 'a_lot_of_difficulty', cannot_do_at_all = 'cannot_do_at_all')
