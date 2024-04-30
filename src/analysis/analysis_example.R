@@ -205,37 +205,6 @@ run_edu_analysis_prop <- function(df, den, num, strata_string = NULL) {
   return(result_df)
 }
 
-
-
-
-
-
-results_school_5_18_age <- list( all =  run_edu_analysis_prop(edu_data, indicator_den[['school_aged_children_accessing']], indicator_num[['school_aged_children_accessing']]))
-
-
-
-
-results_school_pre_school_age_accessing <- list( all =  run_edu_analysis_prop(edu_data, indicator_den[['pre_school_age_accessing']], indicator_num[['pre_school_age_accessing']]))
-
-pippo <-  as_survey(edu_data,  weights = weight)
-result_df <- svy_analysis(design =pippo, analysis = 'prop', 'attending_level0_level1_and_level1_minus_one_age')
-
-
-
-for (stratum in list_strata) {
-  # Run the analysis for the current stratum
-  stratum_result <- run_edu_analysis_prop(edu_data, indicator_den[['school_aged_children_accessing']], indicator_num[['school_aged_children_accessing']], stratum)
-  
-  # Combine the results
-  # Note: Adjust this depending on how you want to combine and what format your results are in
-  results_school_5_18_age[[stratum]] <- stratum_result
-}
-
-combined_results_school_5_18_age <- bind_rows(results_school_5_18_age, .id = "source")
-
-
-
-# Initialize an empty list to hold the results for all indicators.
 all_indicators_results <- list()
 
 # Extract the keys (names) of the indicators from indicator_den or indicator_num (both should have the same keys).
@@ -264,5 +233,4 @@ for (indicator_key in indicator_keys) {
   all_indicators_results[[indicator_key]] <- combined_results
 }
 
-# At this point, all_indicators_results contains the results for all indicators, structured by indicator keys.
 
